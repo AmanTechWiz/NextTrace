@@ -101,15 +101,18 @@ def test_cas_handoff_only_one_wins(g):
     assert first == [[1]] and second == []
 
 
-def test_unique_constraint_rejects_duplicate(g):
+def unique_signal_key(g):
     g.create_node_range_index("Signal", "key")
     g.create_node_unique_constraint("Signal", "key")
     for _ in range(50):  # constraint builds asynchronously
-        status = [c for c in g.list_constraints() if "Signal" in str(c)]
-        if "OPERATIONAL" in str(status):
-            break
+        if "OPERATIONAL" in str(g.list_constraints()):
+            return
         time.sleep(0.1)
-    assert "OPERATIONAL" in str(status), status
+    raise AssertionError(g.list_constraints())
+
+
+def test_unique_constraint_rejects_duplicate(g):
+    unique_signal_key(g)
     g.query("CREATE (:Signal {key:'x'})")
     with pytest.raises(Exception):
         g.query("CREATE (:Signal {key:'x'})")
@@ -148,30 +151,51 @@ async def _parallel(n_writers, query, params_for):
     errors = []
 
     async def one(i):
-        try:
-            await ag.query(query, params_for(i))
-        except Exception as e:  # record, don't hide: MAX_QUEUED_QUERIES may reject some
-            errors.append(str(e))
+        for attempt in range(20):
+            try:
+                return await ag.query(query, params_for(i))
+            except Exception as e:
+                # the image sets MAX_QUEUED_QUERIES 25: back off and retry, like a real writer would
+                if "Max pending queries exceeded" in str(e):
+                    await asyncio.sleep(0.005 * (attempt + 1))
+                    continue
+                errors.append(str(e))
+                return
+        errors.append("gave up after 20 retries")
 
     t0 = time.perf_counter()
-    await asyncio.gather(*(one(i) for i in range(n_writers)))
+    results = await asyncio.gather(*(one(i) for i in range(n_writers)))
     elapsed = time.perf_counter() - t0
     await pool.aclose()
-    return errors, elapsed
+    return errors, elapsed, results
 
 
 def test_50_parallel_merges_make_one_node(g):
-    errors, elapsed = asyncio.run(
+    # Without an index, parallel MERGE made duplicates in 16-21 of 30 runs (Oct 15 test).
+    # Index + unique constraint is the guarantee; losers get a violation error = "already exists".
+    unique_signal_key(g)
+    errors, elapsed, _ = asyncio.run(
         _parallel(50, "MERGE (s:Signal {key:$k}) ON CREATE SET s.n = $i", lambda i: {"k": "same", "i": i})
     )
     print(f"\n50 parallel MERGE: {elapsed*1000:.1f} ms, errors={len(errors)} {errors[:1]}")
-    assert errors == []
+    assert all("unique constraint violation" in e for e in errors)
     assert g.ro_query("MATCH (s:Signal {key:'same'}) RETURN count(s)").result_set[0][0] == 1
+
+
+def test_50_parallel_cas_one_winner(g):
+    g.query("CREATE (:Incident {id:'i1', status:'open', version:0})")
+    cas = ("MATCH (i:Incident {id:'i1'}) WHERE i.version = 0 AND i.status = 'open' "
+           "SET i.status = 'triaging', i.version = 1, i.owner_agent = $a RETURN i.owner_agent")
+    errors, _, results = asyncio.run(_parallel(50, cas, lambda i: {"a": f"agent{i}"}))
+    assert errors == []
+    winners = [r.result_set[0][0] for r in results if r.result_set]
+    owner = g.ro_query("MATCH (i:Incident {id:'i1'}) RETURN i.owner_agent, i.version").result_set[0]
+    assert len(winners) == 1 and owner == [winners[0], 1]
 
 
 def test_50_parallel_increments_lose_nothing(g):
     g.query("CREATE (:Runbook {id:'r1', successes:0})")
-    errors, elapsed = asyncio.run(
+    errors, elapsed, _ = asyncio.run(
         _parallel(50, "MATCH (r:Runbook {id:'r1'}) SET r.successes = r.successes + 1", lambda i: {})
     )
     print(f"\n50 parallel increments: {elapsed*1000:.1f} ms, errors={len(errors)} {errors[:1]}")
