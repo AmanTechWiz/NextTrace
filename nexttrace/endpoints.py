@@ -102,6 +102,31 @@ def _line_routes(service, f, rel):
     return out
 
 
+CS_GROUP = re.compile(r"\b(\w+)\s*=\s*(\w+)\.MapGroup\(\s*\"([^\"]*)\"")
+CS_MAP = re.compile(r"\b(\w+)\.Map(Get|Post|Put|Delete|Patch)\(\s*\"([^\"]*)\"")
+CS_ATTR = re.compile(r"\[(?:Route|Http(Get|Post|Put|Delete|Patch))(?:\(\s*\"([^\"]*)\"\s*\))?\]")
+
+
+def _csharp_routes(service, f, rel):
+    """ASP.NET minimal APIs (`var api = app.MapGroup("api/catalog"); api.MapGet("/items", ...)`) and controllers
+    (`[Route("api/[controller]")]` on the class, `[HttpGet("{id}")]` on methods)."""
+    text, out, groups, base = f.read_text(errors="ignore"), [], {}, ""
+    cls = re.search(r"class\s+(\w+?)(?:Controller)?\b", text)
+    for i, line in enumerate(text.splitlines(), 1):
+        where = f"{rel}:{i}"
+        for g in CS_GROUP.finditer(line):
+            groups[g.group(1)] = _join(groups.get(g.group(2), ""), g.group(3))
+        for mp in CS_MAP.finditer(line):
+            out.append(Route(service, mp.group(2).upper(), _join(groups.get(mp.group(1), ""), mp.group(3)), where))
+        for a in CS_ATTR.finditer(line):
+            path = (a.group(2) or "").replace("[controller]", cls.group(1).lower() if cls else "")
+            if a.group(1) is None:  # [Route] before the class sets the base
+                base = path if not out or "class " in "".join(text.splitlines()[i:i + 3]) else base
+            else:
+                out.append(Route(service, a.group(1).upper(), _join(base, path), where))
+    return out
+
+
 def _proto_routes(repo, m):
     """gRPC: proto `service CartService { rpc GetCart }` belongs to the service named cartservice (or cart)."""
     by_name = {re.sub(r"[^a-z0-9]", "", n.lower()): n for n in m.services}
@@ -131,7 +156,8 @@ def routes(repo: Path, m: ServiceMap):
             continue
         for f in _files(repo / s["source_dir"], CODE_EXT):
             rel = _rel(repo, f)
-            out += _spring_routes(name, f, rel) if f.suffix in (".java", ".kt") else _line_routes(name, f, rel)
+            out += (_spring_routes(name, f, rel) if f.suffix in (".java", ".kt") else
+                    _csharp_routes(name, f, rel) if f.suffix == ".cs" else _line_routes(name, f, rel))
     return sorted(set(out)), grpc_owner
 
 

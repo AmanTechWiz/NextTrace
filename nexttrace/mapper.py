@@ -23,12 +23,20 @@ from pathlib import Path
 
 import yaml
 
-SKIP_DIRS = {".git", "node_modules", "vendor", "target", "build", "dist", "test", "tests", "__pycache__", ".venv",
-             "docs", "doc", "old-docs", "examples", "samples"}
+SKIP_DIRS = {".git", "node_modules", "vendor", "target", "build", "dist", "test", "tests", "__pycache__", ".venv"}
+# docs/examples folders are skipped near the top of a repo only: org/springframework/samples/... is real code
+SKIP_TOP = {"docs", "doc", "old-docs", "examples", "samples"}
+
+
+def _skipped(parts) -> bool:
+    return bool(SKIP_DIRS.intersection(parts) or SKIP_TOP.intersection(parts[:2]))
 CODE_EXT = {".java", ".py", ".js", ".ts", ".go", ".cs", ".kt", ".rb", ".php", ".rs", ".scala"}
 CONFIG_EXT = {".yml", ".yaml", ".properties", ".env", ".conf", ".toml", ".ini", ".json"}
 INFRA = re.compile(r"prometheus|grafana|jaeger|zipkin|kibana|fluent|opentelemetry|otel|loki|kube-state-metrics"
                    r"|alertmanager|node-exporter|istio|elastic-?search")
+# well-known engines: a datastore even when the repo ships its own image for it (a folder with a Dockerfile)
+DB_ENGINE = re.compile(r"(?:^|[-_/])(?:mongo(?:db)?|mysql|redis|valkey|postgres(?:ql)?|mariadb|cassandra|rabbitmq|kafka"
+                       r"|memcached?|sqlserver|mssql|nats)(?:[-_:]|$)")
 DATASTORE = re.compile(r"mongo|mysql|redis|postgres|mariadb|cassandra|rabbitmq|kafka|memcache|-db\b|_db\b")
 COMMENT = ("//", "#", "*", "/*", "<!--", ";")
 RANK = {"trace": 3, "config": 2, "code": 1}
@@ -71,7 +79,7 @@ def _rel(repo, p):
 
 def _files(root: Path, exts=None, names=None):
     for p in sorted(root.rglob("*")):
-        if not p.is_file() or SKIP_DIRS.intersection(p.relative_to(root).parts[:-1]):
+        if not p.is_file() or _skipped(p.relative_to(root).parts[:-1]):
             continue
         if (exts and p.suffix in exts) or (names and p.name in names):
             yield p
@@ -154,6 +162,39 @@ def _catalog(repo, m, pending):
                 pending.append((name, str(dep).split("/")[-1].split(":")[-1], f, "name"))
 
 
+ASPIRE_KINDS = re.compile(r"\w*Project|\w*App|Container|Dockerfile|Yarp|Database|Redis|Valkey|Garnet|Postgres|SqlServer"
+                          r"|MySql|MongoDB|RabbitMQ|Kafka|Nats|Elasticsearch|Qdrant|Milvus|Keycloak")
+ASPIRE_ADD = re.compile(r"(?:\b(\w+)\s*=\s*)?[\w.]*?\.Add(\w+)(<[^>]*>)?\(\s*\"([^\"]+)\"(?:\s*,\s*\"([^\"]+)\")?")
+
+
+def _aspire(repo, m, pending):
+    """.NET Aspire: `var api = builder.AddProject<Projects.Basket_API>("basket-api").WithReference(redis);`"""
+    for f in _files(repo, {".cs"}):
+        text = f.read_text(errors="ignore")
+        if "DistributedApplication.CreateBuilder" not in text:
+            continue
+        names = {}  # C# variable -> resource name
+        for stmt in text.split(";"):
+            a = ASPIRE_ADD.search(stmt)
+            if not a or not ASPIRE_KINDS.fullmatch(a.group(2)):
+                continue
+            var, kind, generic, name, path = a.groups()
+            if var:
+                names[var] = name
+            src = ""
+            if path and (f.parent / path).is_dir():
+                src = _rel(repo, (f.parent / path).resolve())
+            elif generic and (proj := re.search(r"Projects\.(\w+)", generic)):
+                folder = next((p for p in sorted(repo.rglob(proj.group(1).replace("_", ".")))
+                               if p.is_dir() and not _skipped(p.relative_to(repo).parts)), None)
+                src = _rel(repo, folder) if folder else ""
+            app = kind.endswith(("Project", "App")) or kind in ("Container", "Dockerfile", "Yarp")
+            m.declare(name, _rel(repo, f), source_dir=src, hint="" if app else "resource")
+            for ref in re.findall(r"\.WithReference\(\s*(\w+)\s*\)", stmt):
+                if ref in names:
+                    pending.append((name, names[ref], f, "name"))
+
+
 def _dockerfiles(repo, m):
     for f in _files(repo, names={"Dockerfile"}):
         name = repo.name if f.parent == repo else f.parent.name
@@ -161,12 +202,21 @@ def _dockerfiles(repo, m):
 
 
 def _source_dirs(repo, m):
-    """Shallowest folder named like a service, for services declared without one."""
-    missing = {n for n, s in m.services.items() if not s["source_dir"]}
-    for p in sorted(repo.rglob("*"), key=lambda p: (len(p.parts), str(p))):
-        if p.name in missing and p.is_dir() and not SKIP_DIRS.intersection(p.relative_to(repo).parts):
-            m.services[p.name]["source_dir"] = _rel(repo, p)
-            missing.discard(p.name)
+    """For services declared without a folder: the shallowest folder named like the service, like its image
+    (springcommunity/spring-petclinic-customers-service), or ending in -<service>."""
+    want = {}
+    for n, s in m.services.items():
+        if not s["source_dir"]:
+            images = {i.rsplit("/", 1)[-1].split(":")[0].split("@")[0] for i in s["hint"].split()}
+            want[n] = {n} | {i for i in images if i and "$" not in i}
+    if not want:
+        return
+    dirs = [p for p in sorted(repo.rglob("*"), key=lambda p: (len(p.parts), str(p)))
+            if p.is_dir() and not _skipped(p.relative_to(repo).parts)]
+    for n, names in want.items():
+        hit = next((p for p in dirs if p.name in names or p.name.endswith("-" + n)), None)
+        if hit:
+            m.services[n]["source_dir"] = _rel(repo, hit)
 
 
 def _codeowners(repo, m):
@@ -189,6 +239,8 @@ def _codeowners(repo, m):
 def _kind(name, s):
     if INFRA.search(name):
         return "infra"
+    if DB_ENGINE.search(name) or "resource" in s["hint"]:
+        return "datastore"
     if s["source_dir"]:
         return "service"
     if "resource" in s["hint"] or DATASTORE.search(f"{name} {s['hint']}"):
@@ -205,6 +257,7 @@ def scan(repo, known=()) -> ServiceMap:
     _k8s(repo, m, pending)
     _compose(repo, m, pending)
     _catalog(repo, m, pending)
+    _aspire(repo, m, pending)
     if not m.services:
         _dockerfiles(repo, m)  # nothing declared: one service per Dockerfile folder (polyrepo default)
     if repo.name in m.services:  # polyrepo: a repo named after a service is that service's code
@@ -219,11 +272,14 @@ def scan(repo, known=()) -> ServiceMap:
     edge = r"(?![A-Za-z0-9-])"
     addr = re.compile(rf"[a-z][a-z0-9+.-]*://(?:[^/@\s]*@)?({alts}){edge}|(?<![A-Za-z0-9.-])({alts}):\d")
     # config: `host: ts-order-mongo`, `spring.rabbitmq.host=rabbitmq` (not `hostname:`, which names the service itself)
-    keyed = re.compile(rf"(?i:host(?!name)|url|uri|addr|address|endpoint|server|upstream|broker|proxy_pass)\w*[\"']?\s*[=:]"
+    keyed = re.compile(rf"(?i:host(?!name)|url|uri|addr|address|endpoint|server|upstream|broker|proxy_pass|serviceid)\w*[\"']?\s*[=:]"
                        rf"\s*\S*?(?<![A-Za-z0-9.-])({alts}){edge}")
-    # code: the name as an exact string next to a host/client word: new Hostname("payment"),
-    # @FeignClient(name = "carts"), getServiceUrl("ts-seat-service")
-    quoted = re.compile(rf"(?i:host|url|uri|service|endpoint|client|addr|target|channel)[^\n]*?[\"']({alts})[\"']")
+    # code: the name passed straight to a host/URL call or a client annotation: new Hostname("payment"),
+    # getServiceUrl("ts-seat-service"), @FeignClient(name = "carts"). Not any line that mentions "client".
+    quoted = re.compile(rf"(?:@\w*Client|\b\w*(?i:host|url|uri|addr|endpoint|target|channel)\w*)\s*\(\s*(?:\w+\s*=\s*)?[\"']({alts})[\"']")
+    # code: a host-like env var with the service as default: getenv("CART_HOST", "cart"), process.env.REDIS_HOST || 'redis'
+    envdefault = re.compile(rf"(?i:[A-Z0-9_]*(?:HOST|URL|URI|ADDR|ENDPOINT|SERVER)[A-Z0-9_]*)[\"']?\s*(?:,|\|\||\?\?|\bor\b|:-)"
+                            rf"\s*[\"']({alts})[\"']")
 
     def hits(text, patterns):
         for p in patterns:
@@ -240,11 +296,13 @@ def scan(repo, known=()) -> ServiceMap:
             continue
         for f in _files(repo / s["source_dir"], CODE_EXT | CONFIG_EXT):
             is_config = f.suffix in CONFIG_EXT
+            # Spring Cloud Config style: shared/account-service.yml holds account-service's settings, wherever it lives
+            owner = f.stem if is_config and f.stem in m.services else name
             for i, line in enumerate(f.read_text(errors="ignore").splitlines(), 1):
                 if line.lstrip().startswith(COMMENT):
                     continue
-                for callee in hits(line, [addr, keyed] if is_config else [addr, quoted]):
-                    m.add(name, callee, Evidence("config" if is_config else "code", f"{_rel(repo, f)}:{i}", line.strip()[:160]))
+                for callee in hits(line, [addr, keyed] if is_config else [addr, quoted, envdefault]):
+                    m.add(owner, callee, Evidence("config" if is_config else "code", f"{_rel(repo, f)}:{i}", line.strip()[:160]))
     return m
 
 

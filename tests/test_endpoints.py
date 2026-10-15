@@ -259,3 +259,19 @@ def test_commit_is_the_mapped_codes_own(tmp_path):
     assert mapper._commit(tmp_path / "ws" / "a").startswith(a)         # a repo itself
     (tmp_path / "plain").mkdir()
     assert mapper._commit(tmp_path / "plain") == "unversioned"
+
+
+def test_csharp_minimal_api_groups_and_controllers(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n  catalog: {build: ./catalog}\n  orders: {build: ./orders}\n",
+        "catalog/Apis/CatalogApi.cs": ('var api = app.MapGroup("api/catalog");\nvar items = api.MapGroup("items");\n'
+                                       'items.MapGet("/{id:int}", GetItem);\napi.MapPost("/brands", AddBrand);\n'
+                                       'app.MapGet("/health", Health);\n'),
+        "orders/Controllers/OrdersController.cs": ('[ApiController]\n[Route("api/[controller]")]\n'
+                                                   'public class OrdersController : ControllerBase {\n'
+                                                   '  [HttpGet("{id}")]\n  public Order Get(int id) {}\n'
+                                                   '  [HttpPost]\n  public void Create() {}\n}\n'),
+    })
+    _, routes, _ = run(repo)
+    assert {r.key for r in routes} == {"catalog GET /api/catalog/items/{id:int}", "catalog POST /api/catalog/brands",
+                                       "catalog GET /health", "orders GET /api/orders/{id}", "orders POST /api/orders"}

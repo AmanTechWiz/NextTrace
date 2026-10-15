@@ -163,3 +163,60 @@ def test_boutique_matches_googles_diagram():
 @pytest.mark.skipif(not (REPOS / "train-ticket").exists(), reason="clone train-ticket v0.2.1 into data/repos/train-ticket")
 def test_train_ticket_is_deterministic():
     assert mapper.edge_rows(mapper.scan(REPOS / "train-ticket")) == mapper.edge_rows(mapper.scan(REPOS / "train-ticket"))
+
+
+def test_quoted_names_count_only_in_host_calls_annotations_and_env_defaults(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n" + "".join(f"  {s}: {{build: ./{s}}}\n" for s in ("a", "b", "c", "d", "e")),
+        "a/Auth.java": 'clients.inMemory().withClient("b").secret("x");\nlog.info("calling c now");\n',  # not calls
+        "a/Client.java": '@FeignClient(name = "c")\ninterface CClient {}\n',
+        "a/app.py": 'D = os.getenv("D_HOST", "d")\n',
+        "a/server.js": "const e = require('e');\nvar eHost = process.env.E_ENDPOINT || 'e';\n",
+        "b/x.go": "", "c/x.go": "", "d/x.go": "", "e/x.go": "",
+    })
+    assert set(mapper.scan(repo).edges) == {("a", "c"), ("a", "d"), ("a", "e")}
+
+
+def test_service_folders_found_by_image_or_suffix_and_db_kind(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": ("services:\n  customers: {image: 'acme/acme-customers-service:1'}\n"
+                               "  vets-service: {image: 'vets:1'}\n  mongodb: {build: ./mongo}\n"),
+        "acme-customers-service/src/main/java/org/acme/samples/Repo.java": 'String u = "http://vets-service/vets";\n',
+        "platform-vets-service/app.py": "",
+        "mongo/Dockerfile": "FROM mongo",
+        "examples/k8s/demo.yaml": deploy("example-only"),  # top-level examples are not part of the system
+    })
+    m = mapper.scan(repo)
+    assert m.services["customers"]["source_dir"] == "acme-customers-service"   # matched by image name
+    assert m.services["vets-service"]["source_dir"] == "platform-vets-service"  # matched by -<name> suffix
+    assert m.services["mongodb"]["kind"] == "datastore"                         # an engine, even with its own image
+    assert "example-only" not in m.services
+    assert ("customers", "vets-service") in m.edges  # code deep in a .../samples/... package is still read
+
+
+def test_config_file_named_after_a_service_belongs_to_it(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n  config: {build: ./config}\n  orders: {build: ./orders}\n  orders-db: {image: 'mongo'}\n",
+        "config/shared/orders.yml": "spring:\n  data:\n    mongodb:\n      host: orders-db\n",
+        "orders/app.py": "",
+    })
+    edges = set(mapper.scan(repo).edges)
+    assert ("orders", "orders-db") in edges and ("config", "orders-db") not in edges
+
+
+def test_dotnet_aspire_apphost(tmp_path):
+    repo = make(tmp_path / "r", {
+        "src/AppHost/Program.cs": (
+            'var builder = DistributedApplication.CreateBuilder(args);\n'
+            'var cache = builder.AddRedis("cache");\n'
+            'var pg = builder.AddPostgres("pg");\nvar db = pg.AddDatabase("ordersdb");\n'
+            'var api = builder.AddProject<Projects.Orders_Api>("orders-api")\n    .WithReference(db)\n    .WithReference(cache);\n'
+            'builder.AddProject("web", "../Web").WithReference(api);\n'
+            'builder.AddAzureContainerAppEnvironment("aca");\nbuilder.Build().Run();\n'),
+        "src/Orders.Api/Program.cs": "", "src/Web/Program.cs": "",
+    })
+    m = mapper.scan(repo)
+    assert {n: s["kind"] for n, s in m.services.items()} == {
+        "cache": "datastore", "pg": "datastore", "ordersdb": "datastore", "orders-api": "service", "web": "service"}
+    assert m.services["orders-api"]["source_dir"] == "src/Orders.Api" and m.services["web"]["source_dir"] == "src/Web"
+    assert set(m.edges) == {("orders-api", "ordersdb"), ("orders-api", "cache"), ("web", "orders-api")}
