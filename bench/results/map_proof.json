@@ -1,0 +1,198 @@
+{
+  "results": [
+    {
+      "system": "Train Ticket",
+      "repo": "train-ticket",
+      "commit": "350f62000e6658e0e543730580c599d8558253e7",
+      "trace_files": [
+        "ts-order-service_delay_2.csv",
+        "ts-order-service_delay_3.csv",
+        "ts-order-service_disk_2.csv",
+        "ts-order-service_disk_3.csv",
+        "ts-order-service_loss_2.csv",
+        "ts-order-service_loss_3.csv",
+        "ts-order-service_socket_2.csv",
+        "ts-route-service_cpu_2.csv",
+        "ts-route-service_cpu_3.csv",
+        "ts-train-service_socket_1.csv"
+      ],
+      "spans_calls": 291342,
+      "services": {
+        "observed": 55,
+        "found": 55,
+        "comparable": 55,
+        "missed": [],
+        "undeclared": [],
+        "scanned": 160,
+        "checkable": 61,
+        "seen_in_traffic": 55,
+        "unseen": [
+          {
+            "caller": "ts-admin-basic-info-service",
+            "callee": "ts-contacts-service",
+            "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:38 | \"http://ts-contacts-service:12347/api/v1/contactservice/contacts\",",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L38"
+          },
+          {
+            "caller": "ts-admin-basic-info-service",
+            "callee": "ts-station-service",
+            "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:27 | String stations = \"http://ts-station-service:12345/api/v1/stationservice/stations\";",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L27"
+          },
+          {
+            "caller": "ts-admin-basic-info-service",
+            "callee": "ts-train-service",
+            "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:188 | \"http://ts-train-service:14567/api/v1/trainservice/trains/\" + id,",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L188"
+          },
+          {
+            "caller": "ts-preserve-other-service",
+            "callee": "ts-consign-service",
+            "evidence": "code | ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java:401 | \"http://ts-consign-service:16111/api/v1/consignservice/consigns\",",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java#L401"
+          },
+          {
+            "caller": "ts-preserve-service",
+            "callee": "ts-consign-service",
+            "evidence": "code | ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java:395 | \"http://ts-consign-service:16111/api/v1/consignservice/consigns\",",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java#L395"
+          },
+          {
+            "caller": "ts-user-service",
+            "callee": "ts-auth-service",
+            "evidence": "code | ts-user-service/src/main/java/user/service/impl/UserServiceImpl.java:32 | private static final String AUTH_SERVICE_URI = \"http://ts-auth-service:12340/api/v1\";",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-user-service/src/main/java/user/service/impl/UserServiceImpl.java#L32"
+          }
+        ],
+        "not_checkable": {
+          "caller has no spans in these traces": 68,
+          "callee is a datastore or infra (not traced)": 30,
+          "callee has no spans in these traces": 1
+        }
+      },
+      "endpoints": {
+        "observed": 63,
+        "found": 63,
+        "missed": [],
+        "routes_parsed": 255,
+        "calls_mapped": 171,
+        "calls_linked": 169,
+        "unmatched": [
+          {
+            "caller": "ts-rebook-service",
+            "callee": "ts-order-other-service",
+            "method": "POST",
+            "path": "/api/v1/orderOtherService/orderOther/",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340"
+          },
+          {
+            "caller": "ts-rebook-service",
+            "callee": "ts-order-service",
+            "method": "POST",
+            "path": "/api/v1/orderservice/order/",
+            "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340"
+          }
+        ]
+      },
+      "diagram": null
+    },
+    {
+      "system": "Online Boutique",
+      "repo": "boutique",
+      "commit": "38e7348eb289eb5b87c0c6e8cb19ced0449dc389",
+      "trace_files": [
+        "checkoutservice_cpu_1.csv",
+        "checkoutservice_delay_1.csv",
+        "checkoutservice_disk_1.csv",
+        "checkoutservice_loss_1.csv",
+        "checkoutservice_mem_1.csv"
+      ],
+      "spans_calls": 851748,
+      "services": {
+        "observed": 9,
+        "found": 9,
+        "comparable": 9,
+        "missed": [],
+        "undeclared": [],
+        "scanned": 17,
+        "checkable": 9,
+        "seen_in_traffic": 9,
+        "unseen": [],
+        "not_checkable": {
+          "callee is a datastore or infra (not traced)": 1,
+          "callee has no spans in these traces": 6,
+          "caller has no spans in these traces": 1
+        }
+      },
+      "endpoints": {
+        "observed": 11,
+        "found": 11,
+        "missed": [],
+        "routes_parsed": 16,
+        "calls_mapped": 20,
+        "calls_linked": 20,
+        "unmatched": []
+      },
+      "diagram": {
+        "edges": 16,
+        "found": 16
+      }
+    }
+  ],
+  "spot_check": [
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-admin-basic-info-service",
+        "callee": "ts-train-service",
+        "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:188 | \"http://ts-train-service:14567/api/v1/trainservice/trains/\" + id,",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L188"
+      }
+    ],
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-admin-basic-info-service",
+        "callee": "ts-station-service",
+        "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:27 | String stations = \"http://ts-station-service:12345/api/v1/stationservice/stations\";",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L27"
+      }
+    ],
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-preserve-other-service",
+        "callee": "ts-consign-service",
+        "evidence": "code | ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java:401 | \"http://ts-consign-service:16111/api/v1/consignservice/consigns\",",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java#L401"
+      }
+    ],
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-user-service",
+        "callee": "ts-auth-service",
+        "evidence": "code | ts-user-service/src/main/java/user/service/impl/UserServiceImpl.java:32 | private static final String AUTH_SERVICE_URI = \"http://ts-auth-service:12340/api/v1\";",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-user-service/src/main/java/user/service/impl/UserServiceImpl.java#L32"
+      }
+    ],
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-admin-basic-info-service",
+        "callee": "ts-contacts-service",
+        "evidence": "code | ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java:38 | \"http://ts-contacts-service:12347/api/v1/contactservice/contacts\",",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java#L38"
+      }
+    ],
+    [
+      "Train Ticket",
+      {
+        "caller": "ts-preserve-service",
+        "callee": "ts-consign-service",
+        "evidence": "code | ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java:395 | \"http://ts-consign-service:16111/api/v1/consignservice/consigns\",",
+        "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java#L395"
+      }
+    ]
+  ]
+}
