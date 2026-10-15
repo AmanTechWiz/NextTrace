@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "nexttrace": {
+      "command": "uv",
+      "args": ["run", "python", "-m", "nexttrace.mcp_server"],
+      "env": {"FALKORDB_HOST": "localhost", "FALKORDB_PORT": "6379"}
+    }
+  }
+}

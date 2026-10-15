@@ -5,6 +5,7 @@ description = "Finds which service failed first, who it hurts, and what fixed it
 requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.8.0",
+    "mcp>=1.0",
     "pandas>=3.0.6",
     "pyyaml>=6.0.3",
 ]
