@@ -48,12 +48,13 @@ def clean():
 def test_tools_are_listed_with_read_only_hints():
     tools = session(lambda s: s.list_tools()).tools
     hints = {t.name: bool(t.annotations and t.annotations.read_only_hint) for t in tools}
-    assert hints == {"map_repo": False, "list_maps": True, "service_calls": True}
+    assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
     repo = make(tmp_path / "shop", {"docker-compose.yml": COMPOSE,
-                                    "web/app.js": 'fetch("http://api:8080/orders")\n',
+                                    "web/app.js": 'fetch("http://api:8080/orders", {method: "POST"})\n',
+                                    "api/routes.py": "@app.post('/orders')\ndef create(): ...\n",
                                     "api/main.py": 'DB = "postgres://db:5432/app"\n'})
 
     async def steps(s):
@@ -61,15 +62,19 @@ def test_map_then_read_with_evidence(tmp_path, clean):
         again = await s.call_tool("map_repo", {"path": str(repo)})
         api = await s.call_tool("service_calls", {"graph": "shop", "service": "api"})
         maps = await s.call_tool("list_maps", {})
-        return first, again, api, maps
+        routes = await s.call_tool("endpoint_calls", {"graph": "shop", "service": "api"})
+        return first, again, api, maps, routes
 
-    first, again, api, maps = session(steps)
+    first, again, api, maps, routes = session(steps)
+    (route,) = routes.structured_content["exposes"]
+    assert (route["method"], route["path"], route["where"]) == ("POST", "/orders", "api/routes.py:1")
+    assert route["called_by"][0]["service"] == "web" and "web/app.js:1" in route["called_by"][0]["evidence"][0]
     assert not first.is_error and first.structured_content["graph"] == "shop"
     assert (first.structured_content["services"], first.structured_content["calls"]) == (3, 2)
     assert again.structured_content["calls"] == 2 and again.structured_content["stale_calls"] == 0  # idempotent
     a = api.structured_content
     assert [c["service"] for c in a["calls"]] == ["db"] and [c["service"] for c in a["called_by"]] == ["web"]
-    assert a["called_by"][0]["evidence"][0] == 'code | web/app.js:1 | fetch("http://api:8080/orders")'
+    assert a["called_by"][0]["evidence"][0] == 'code | web/app.js:1 | fetch("http://api:8080/orders", {method: "POST"})'
     shop = next(m for m in maps.structured_content["result"] if m["graph"] == "shop")
     assert shop["services"] == 3 and shop["repos"][0]["repo"] == "shop"
 
