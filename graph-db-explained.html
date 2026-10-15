@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph databases, explained for NextTrace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d10; --panel: #12161c; --panel2: #171c24; --line: #232a35;
+    --text: #e6e8eb; --muted: #9aa4b2; --accent: #5eead4; --warn: #fbbf24; --bad: #f87171;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.65 Inter, system-ui, -apple-system, sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 56px 24px 96px; }
+  nav { position: sticky; top: 0; z-index: 5; background: rgba(11,13,16,.88); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line); }
+  nav div { max-width: 920px; margin: 0 auto; padding: 10px 24px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; }
+  nav a { color: var(--muted); text-decoration: none; }
+  nav a:hover, nav a:focus-visible { color: var(--accent); }
+  h1 { font-size: 40px; line-height: 1.15; margin: 0 0 12px; letter-spacing: -.02em; }
+  h2 { font-size: 26px; margin: 72px 0 8px; letter-spacing: -.01em; scroll-margin-top: 64px; }
+  h3 { font-size: 18px; margin: 28px 0 8px; }
+  p { margin: 10px 0; }
+  .lead { color: var(--muted); font-size: 18px; }
+  .kicker { color: var(--accent); font: 500 13px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin: 18px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 760px) { .grid2, .grid3 { grid-template-columns: 1fr; } h1 { font-size: 32px; } }
+  .label { font: 500 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  pre { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px;
+    overflow-x: auto; font: 13.5px/1.6 var(--mono); margin: 8px 0; }
+  code { font-family: var(--mono); font-size: .9em; color: var(--accent); }
+  pre code { color: var(--text); font-size: inherit; }
+  .k { color: #93c5fd; } .s { color: #fca5a5; } .c { color: #6b7685; } .n { color: var(--accent); } .r { color: var(--warn); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; border: 1px solid var(--line); color: var(--muted); }
+  .good { color: var(--accent); } .meh { color: var(--warn); } .bad { color: var(--bad); }
+  .callout { border-left: 3px solid var(--accent); padding: 4px 0 4px 16px; margin: 18px 0; color: var(--text); }
+  .callout.warn { border-color: var(--warn); }
+  svg text { font-family: Inter, sans-serif; }
+  .matrix td, .matrix th { text-align: center; padding: 6px; font: 13px var(--mono); border: 1px solid var(--line); }
+  .matrix td.one { color: var(--bg); background: var(--accent); font-weight: 600; }
+  .matrix td.hot { color: var(--bg); background: var(--warn); font-weight: 600; }
+  .stack { display: flex; flex-direction: column; align-items: stretch; gap: 0; }
+  .layer { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  .layer b { display: block; }
+  .layer span { color: var(--muted); font-size: 14px; }
+  .arrow { text-align: center; color: var(--muted); font-size: 18px; line-height: 1.6; }
+  .inner { border: 1px dashed #2f3a48; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 0; }
+  .tenants { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .tenants span { font: 12.5px var(--mono); padding: 3px 10px; border-radius: 6px; background: #0f2a27; color: var(--accent); }
+  footer { margin-top: 80px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); padding-top: 20px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<nav aria-label="Sections"><div>
+  <a href="#idea">1 · The idea</a><a href="#vs">2 · SQL vs Cypher</a><a href="#fast">3 · Why it's fast</a>
+  <a href="#arch">4 · Architecture</a><a href="#cypher">5 · Cypher cheat sheet</a><a href="#algos">6 · Algorithms</a>
+  <a href="#when">7 · When not to</a><a href="#ours">8 · NextTrace</a>
+</div></nav>
+
+<main>
+  <div class="kicker">Primer · 10 minutes</div>
+  <h1>Graph databases, explained with our own project</h1>
+  <p class="lead">Enough to understand the architecture and explain it to judges. All the examples use NextTrace: a small online shop made of services that call each other.</p>
+
+  <!-- 1 -->
+  <h2 id="idea">1 · The one idea: rows vs. dots and arrows</h2>
+  <p>A <b>relational database</b> (Oracle, Postgres) stores everything as <b>rows in tables</b>. Connections are just matching values: a row in <code>calls</code> says "frontend calls checkout". To follow a connection, the database has to <b>look it up</b> (a JOIN) every time.</p>
+  <p>A <b>graph database</b> stores <b>things</b> (nodes, the dots) and <b>connections</b> (relationships, the arrows) as first-class data. Following a connection doesn't need a lookup: the arrow is already stored with the thing.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="label">Oracle: a table of connections</div>
+      <table>
+        <thead><tr><th>caller</th><th>callee</th></tr></thead>
+        <tbody>
+          <tr><td>frontend</td><td>checkout</td></tr>
+          <tr><td>frontend</td><td>product</td></tr>
+          <tr><td>checkout</td><td>cart</td></tr>
+          <tr><td>checkout</td><td>payment</td></tr>
+          <tr><td>cart</td><td>redis</td></tr>
+        </tbody>
+      </table>
+      <p class="lead" style="font-size:14px;margin-top:12px">You see rows. The <em>shape</em> (who depends on whom, how deep) is hidden until you query for it.</p>
+    </div>
+    <div class="card">
+      <div class="label">FalkorDB: the same data as a graph</div>
+      <svg viewBox="0 0 520 250" width="100%" role="img" aria-label="Graph: frontend calls checkout and product; checkout calls cart and payment; cart calls redis. Payment is failing; the path frontend to checkout to payment is highlighted.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="34" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#4b5563"/></marker>
+          <marker id="ahw" viewBox="0 0 10 10" refX="34" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#fbbf24"/></marker>
+        </defs>
+        <g stroke-width="2">
+          <line x1="70" y1="125" x2="220" y2="65" stroke="#fbbf24" marker-end="url(#ahw)"/>
+          <line x1="70" y1="125" x2="220" y2="195" stroke="#4b5563" marker-end="url(#ah)"/>
+          <line x1="220" y1="65" x2="370" y2="40" stroke="#4b5563" marker-end="url(#ah)"/>
+          <line x1="220" y1="65" x2="370" y2="145" stroke="#fbbf24" marker-end="url(#ahw)"/>
+          <line x1="370" y1="40" x2="480" y2="110" stroke="#4b5563" marker-end="url(#ah)"/>
+        </g>
+        <g font-size="12" text-anchor="middle" fill="#e6e8eb">
+          <circle cx="70" cy="125" r="30" fill="#12161c" stroke="#5eead4" stroke-width="2"/><text x="70" y="129">frontend</text>
+          <circle cx="220" cy="65" r="30" fill="#12161c" stroke="#5eead4" stroke-width="2"/><text x="220" y="69">checkout</text>
+          <circle cx="220" cy="195" r="30" fill="#12161c" stroke="#5eead4" stroke-width="2"/><text x="220" y="199">product</text>
+          <circle cx="370" cy="40" r="30" fill="#12161c" stroke="#5eead4" stroke-width="2"/><text x="370" y="44">cart</text>
+          <circle cx="370" cy="145" r="30" fill="#2a1414" stroke="#f87171" stroke-width="2.5"/><text x="370" y="149">payment</text>
+          <circle cx="480" cy="110" r="30" fill="#12161c" stroke="#5eead4" stroke-width="2"/><text x="480" y="114">redis</text>
+          <text x="370" y="196" fill="#f87171" font-size="11">failing</text>
+        </g>
+      </svg>
+      <p class="lead" style="font-size:14px;margin-top:4px">You see the shape. Payment is failing, and the amber path shows how the failure reaches users.</p>
+    </div>
+  </div>
+
+  <div class="callout"><b>The vocabulary:</b> <b>node</b> = a thing (a Service). <b>label</b> = its type (<code>:Service</code>). <b>relationship</b> = a typed arrow (<code>:CALLS</code>). <b>properties</b> = key–value data on either (<code>{name:'payment'}</code>). That's the entire data model, called a <em>property graph</em>.</div>
+
+  <!-- 2 -->
+  <h2 id="vs">2 · Same question, two languages</h2>
+  <p><b>Question:</b> "Payment is down. Which services break because of it?" Something breaks if it calls payment directly, <em>or</em> calls something that calls payment, and so on. The depth isn't known in advance.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="label">Oracle SQL: recursive query</div>
+<pre><code><span class="k">WITH</span> upstream (name, depth) <span class="k">AS</span> (
+  <span class="k">SELECT</span> caller, 1 <span class="k">FROM</span> calls
+  <span class="k">WHERE</span> callee = <span class="s">'payment'</span>
+  <span class="k">UNION ALL</span>
+  <span class="k">SELECT</span> c.caller, u.depth + 1
+  <span class="k">FROM</span> calls c
+  <span class="k">JOIN</span> upstream u <span class="k">ON</span> c.callee = u.name
+  <span class="k">WHERE</span> u.depth &lt; 6
+)
+<span class="k">SELECT DISTINCT</span> name <span class="k">FROM</span> upstream;</code></pre>
+      <p style="font-size:14px" class="meh">Works, but you're hand-writing a loop of JOINs. Each level is another lookup.</p>
+    </div>
+    <div class="card">
+      <div class="label">Cypher: describe the shape</div>
+<pre><code><span class="k">MATCH</span> (<span class="n">up</span>:Service)-[:<span class="r">CALLS*1..6</span>]-&gt;(:Service {name:<span class="s">'payment'</span>})
+<span class="k">RETURN DISTINCT</span> <span class="n">up</span>.name</code></pre>
+      <p style="font-size:14px" class="good">You draw the pattern, and <code>*1..6</code> means "follow 1 to 6 arrows". The database does the walking.</p>
+    </div>
+  </div>
+
+  <p><b>Harder question:</b> "Show me the route from the user's entry point to the failing service." In SQL you'd also have to build the path string and stop at the first (shortest) one: painful. In Cypher:</p>
+<pre><code><span class="k">MATCH</span> (a:Service {name:<span class="s">'frontend'</span>}), (b:Service {name:<span class="s">'payment'</span>})
+<span class="k">WITH</span> shortestPath((a)-[:<span class="r">CALLS*</span>]-&gt;(b)) <span class="k">AS</span> p
+<span class="k">RETURN</span> [n <span class="k">IN</span> nodes(p) | n.name]      <span class="c">// → ['frontend', 'checkout', 'payment']</span></code></pre>
+  <p style="color:var(--muted);font-size:14px">This is the "show the path behind the answer" that the hackathon asks for, in one query. (FalkorDB rule: both endpoints must be found <em>before</em> calling <code>shortestPath</code>, which is why the <code>MATCH</code> comes first.)</p>
+
+  <!-- 3 -->
+  <h2 id="fast">3 · Why graphs are fast at this</h2>
+  <div class="grid2">
+    <div class="card">
+      <div class="label">Relational: phone book every hop</div>
+      <p>Each hop = "find all rows where callee = X" in an index. It's like looking up every friend's friend in a phone book. 1 hop is cheap. 5 hops means 5 rounds of lookups, and the work multiplies with fan-out.</p>
+    </div>
+    <div class="card">
+      <div class="label">Graph: just follow the arrow</div>
+      <p>Each thing already knows its arrows. A hop is "go to my neighbours", so cost grows with <b>how much of the graph you actually touch</b>, not with how big the whole table is.</p>
+    </div>
+  </div>
+
+  <h3>FalkorDB's specific trick: the graph is a grid of 1s</h3>
+  <p>FalkorDB stores the arrows as a <b>sparse adjacency matrix</b>: row = from, column = to, a <code>1</code> means "there's an arrow". "Sparse" means only the 1s are stored, so it's tiny in memory.</p>
+  <div class="grid2">
+    <div class="card" style="overflow-x:auto">
+      <div class="label">CALLS matrix (from → to)</div>
+      <table class="matrix" aria-label="Adjacency matrix of CALLS relationships">
+        <tr><th></th><th>front</th><th>check</th><th>prod</th><th>cart</th><th>pay</th><th>redis</th></tr>
+        <tr><th>front</th><td></td><td class="hot">1</td><td class="one">1</td><td></td><td></td><td></td></tr>
+        <tr><th>check</th><td></td><td></td><td></td><td class="one">1</td><td class="hot">1</td><td></td></tr>
+        <tr><th>prod</th><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><th>cart</th><td></td><td></td><td></td><td></td><td></td><td class="one">1</td></tr>
+        <tr><th>pay</th><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+        <tr><th>redis</th><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <div class="label">Why a grid?</div>
+      <p><b>One hop = one matrix multiplication.</b> Two hops = multiply twice. FalkorDB's docs give the example "friends of friends = F²".</p>
+      <p>Matrix maths is something computers are extremely good at. FalkorDB uses <b>GraphBLAS</b>, a standard high-performance library for exactly this. It can also reorder and parallelise the multiplications to keep things fast.</p>
+      <p style="color:var(--muted);font-size:14px">Each relationship type gets its own matrix, and each label gets one too. Adding an edge just flips a cell to 1.</p>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="arch">4 · Architecture: what's actually running</h2>
+  <div class="grid2">
+    <div class="stack" aria-label="Architecture layers from app down to memory">
+      <div class="layer"><b>Our app (Python agent)</b><span>uses the <code>falkordb</code> client library</span></div>
+      <div class="arrow" aria-hidden="true">↓ Cypher text over the Redis protocol (port 6379)</div>
+      <div class="inner">
+        <div class="layer"><b>Redis server + FalkorDB module</b><span>FalkorDB is a C plug-in that runs <em>inside</em> Redis</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="layer"><b>Parser → planner</b><span>Cypher becomes a query plan plus matrix expressions</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="layer"><b>GraphBLAS engine</b><span>runs the matrix maths</span></div>
+        <div class="arrow" aria-hidden="true">↓</div>
+        <div class="layer"><b>Sparse matrices + properties in RAM</b><span>everything lives in memory, with on-disk persistence</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="label">Multigraph: one DB, many graphs</div>
+        <p>Each graph is a separate key in Redis. One instance can hold thousands of fully isolated graphs. We use this for per-customer memory:</p>
+        <div class="tenants"><span>acme</span><span>globex</span><span>initech</span></div>
+        <p style="font-size:14px;color:var(--muted);margin-top:10px">A query against <code>acme</code> physically cannot see <code>globex</code>. That's our "per-tenant isolation" story for Track 2.</p>
+      </div>
+      <div class="card">
+        <div class="label">Tools you'll touch</div>
+        <p><b>Docker image</b>: FalkorDB + Browser in one container.<br>
+        <b>FalkorDB Browser</b> (port 3000): run Cypher, see the graph drawn.<br>
+        <b>Client libs</b>: Python, Node, Java, Rust, Go, …<br>
+        <b>MCP servers</b>: let AI assistants query a graph directly.</p>
+      </div>
+    </div>
+  </div>
+  <div class="callout">
+    <b>Compared to Oracle:</b> Oracle is a disk-first, general-purpose row store with a huge feature set (transactions across tables, reporting, PL/SQL). FalkorDB is a memory-first, specialised engine: one job, traversing connections fast enough to run on <em>every step</em> of an AI agent.
+  </div>
+
+  <!-- 5 -->
+  <h2 id="cypher">5 · Cypher cheat sheet</h2>
+  <p><b>A quick correction:</b> FalkorDB didn't invent Cypher. Neo4j created it, and it was later opened up as <b>openCypher</b>. FalkorDB implements it and adds its own extras (like the <code>algo.*</code> procedures below). The core idea is <b>ASCII art</b>: <code>()</code> is a node and <code>--&gt;</code> is an arrow, so the query looks like the picture.</p>
+
+  <div class="card">
+    <table>
+      <thead><tr><th style="width:34%">You want to…</th><th style="width:30%">SQL habit</th><th>Cypher</th></tr></thead>
+      <tbody>
+        <tr><td>Find things</td><td><code>SELECT … FROM … WHERE</code></td><td><code>MATCH (s:Service) WHERE s.tier = 1 RETURN s</code></td></tr>
+        <tr><td>Follow a connection</td><td><code>JOIN … ON</code></td><td><code>MATCH (a)-[:CALLS]-&gt;(b)</code></td></tr>
+        <tr><td>Follow many hops</td><td>recursive CTE</td><td><code>(a)-[:CALLS*1..5]-&gt;(b)</code></td></tr>
+        <tr><td>Insert</td><td><code>INSERT</code></td><td><code>CREATE (:Service {name:'cart'})</code></td></tr>
+        <tr><td>Insert only if missing</td><td><code>MERGE</code> / upsert</td><td><code>MERGE (:Signal {key:$k})</code></td></tr>
+        <tr><td>Update</td><td><code>UPDATE … SET</code></td><td><code>MATCH (i:Incident {id:$id}) SET i.status = 'resolved'</code></td></tr>
+        <tr><td>Delete</td><td><code>DELETE</code></td><td><code>MATCH (s:Signal) WHERE s.ts &lt; $t DETACH DELETE s</code></td></tr>
+        <tr><td>Chain steps</td><td>subquery</td><td><code>WITH</code> passes results to the next part</td></tr>
+        <tr><td>Group / count</td><td><code>GROUP BY</code></td><td>automatic: <code>RETURN s.name, count(*)</code></td></tr>
+        <tr><td>Run an algorithm</td><td>(no equivalent)</td><td><code>CALL algo.&lt;name&gt;(…) YIELD …</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Read one of our real queries, line by line</h3>
+<pre><code><span class="k">MATCH</span> (i:Incident {id:$id})-[:HAS_SIGNAL]-&gt;(:Signal)-[:ON]-&gt;(s:Service)   <span class="c">// services with alarms in this incident</span>
+<span class="k">WITH</span> collect(<span class="k">DISTINCT</span> s) <span class="k">AS</span> bad                                         <span class="c">// put them in a list called "bad"</span>
+<span class="k">UNWIND</span> bad <span class="k">AS</span> s                                                         <span class="c">// look at each one</span>
+<span class="k">OPTIONAL MATCH</span> (s)-[:CALLS*1..4]-&gt;(d:Service) <span class="k">WHERE</span> d <span class="k">IN</span> bad              <span class="c">// does it depend on another bad one?</span>
+<span class="k">RETURN</span> s.name, count(d) <span class="k">AS</span> badDeps <span class="k">ORDER BY</span> badDeps <span class="k">ASC</span>                <span class="c">// 0 bad dependencies = likely the culprit</span></code></pre>
+  <p style="color:var(--muted);font-size:14px">In plain words: "among the services that are alarming, find the one that isn't just a victim of another alarming service below it." That's root-cause analysis as a graph pattern.</p>
+
+  <!-- 6 -->
+  <h2 id="algos">6 · Built-in algorithms (the "power tools")</h2>
+  <p>Queries answer questions you can describe. Algorithms answer questions about the <b>whole shape</b>. FalkorDB ships these in the database; you call them with <code>CALL algo.&lt;name&gt;(…)</code>. Check the exact arguments on each algorithm's docs page.</p>
+  <div class="grid3">
+    <div class="card"><div class="label">BFS</div><p>Spread outward ring by ring from one node.</p><p class="good" style="font-size:14px">Ours: blast radius, "everything within 3 hops of payment".</p></div>
+    <div class="card"><div class="label">Shortest path</div><p>The quickest route between two nodes.</p><p class="good" style="font-size:14px">Ours: the explanation path, frontend → … → culprit.</p></div>
+    <div class="card"><div class="label">PageRank</div><p>"Important" nodes are ones that many important nodes point to (Google's original idea).</p><p class="good" style="font-size:14px">Ours: which services are most critical overall.</p></div>
+    <div class="card"><div class="label">Betweenness</div><p>Which nodes sit on the most routes, like a bridge everyone must cross.</p><p class="good" style="font-size:14px">Ours: single points of failure.</p></div>
+    <div class="card"><div class="label">WCC</div><p>Groups of nodes connected at all, ignoring arrow direction.</p><p class="good" style="font-size:14px">Ours: are two alarms even related?</p></div>
+    <div class="card"><div class="label">CDLP</div><p>Finds clusters or communities by letting labels spread among neighbours.</p><p class="meh" style="font-size:14px">Ours: optional, grouping services into teams or domains.</p></div>
+  </div>
+  <p style="color:var(--muted);font-size:14px">Also available: A* (pathfinding with coordinates), harmonic centrality, minimum spanning forest, max flow.</p>
+
+  <!-- 7 -->
+  <h2 id="when">7 · When a graph is the wrong tool</h2>
+  <div class="card">
+    <table>
+      <thead><tr><th>Job</th><th>Better fit</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Monthly revenue report, big sums over millions of rows</td><td class="good">SQL / warehouse</td><td>No connections to follow; it's scanning and adding</td></tr>
+        <tr><td>Simple CRUD app (users, orders)</td><td class="good">SQL</td><td>Shallow, fixed relationships; mature tooling</td></tr>
+        <tr><td>"Find text similar to this"</td><td class="good">Vector search</td><td>That's about meaning, not connections</td></tr>
+        <tr><td>Unknown-depth chains, paths, "who's connected to whom"</td><td class="good">Graph</td><td>This is exactly what it's built for</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="callout warn">This is also the hackathon's <b>removal test</b>: if our app works just as well with a plain table, the graph is "decoration". NextTrace's core questions (culprit, blast radius, path, similar past incidents) are all multi-hop, which is why it passes.</div>
+
+  <!-- 8 -->
+  <h2 id="ours">8 · NextTrace's graph, and how to explain it in 30 seconds</h2>
+  <div class="card">
+<pre><code>(:Service)-[:CALLS]-&gt;(:Service)                    <span class="c">// the map of the system</span>
+(:Signal)-[:ON]-&gt;(:Service)                       <span class="c">// alarms, attached to where they fired</span>
+(:Incident)-[:HAS_SIGNAL]-&gt;(:Signal)              <span class="c">// which alarms belong to this outage</span>
+(:Incident)-[:CAUSED_BY]-&gt;(:Service)              <span class="c">// what we concluded (episodic memory)</span>
+(:Incident)-[:APPLIED {worked}]-&gt;(:Runbook)       <span class="c">// what fixed it (procedural memory)</span>
+(:Agent)-[:WROTE]-&gt;(:Incident)                    <span class="c">// who said what (provenance, handoffs)</span></code></pre>
+  </div>
+  <div class="callout">
+    <b>Say this to judges:</b> "The services and how they call each other are a graph. Alarms attach to services. To find the culprit, the agent walks the graph looking for the alarming service that isn't just a victim of another one, and the walk itself is the explanation. Every incident and every fix that worked is saved back into the same graph, so next time the agent recognises the pattern. Each customer gets their own isolated graph, and agents hand work to each other through it. Take the graph away and the agent is just guessing from a list of alarms, and our benchmark measures exactly how much worse it gets."
+  </div>
+
+  <footer>
+    Sources: <a href="https://docs.falkordb.com/design/">FalkorDB internals</a> (sparse matrices, GraphBLAS, traversal = matrix multiplication),
+    <a href="https://docs.falkordb.com/cypher/functions">Cypher functions</a> (shortestPath rules),
+    <a href="https://docs.falkordb.com/algorithms">algorithms</a>,
+    <a href="https://docs.falkordb.com">docs home</a>.
+    Concurrency, from the <a href="https://docs.falkordb.com/design/concurrency.md">concurrency page</a>: one write query at a time per graph (queued in order), reads don't block each other, and each write query is all-or-nothing.
+  </footer>
+</main>
+</body>
+</html>
