@@ -101,7 +101,10 @@ RETURN length(p), [n IN nodes(p) | n.name]
 - **[doc]** Only **one write query runs at a time per graph**; concurrent writes queue FIFO and never interleave.
 - **[doc]** Read queries don't block each other; they use a shared thread pool (`THREAD_COUNT`, default = number of logical cores) and see a snapshot-like view from before any in-flight write.
 - **[doc]** Any query that modifies the graph is **atomic**: all or nothing.
-- **[tested]** 50 parallel `SET r.successes = r.successes + 1` → exactly 50 (about 21 ms total). 50 parallel `MERGE` on one key → exactly 1 node (about 23 ms). A read in one query followed by a write in another is still **not** atomic, so use CAS.
+- **[tested]** 50 parallel `SET r.successes = r.successes + 1` → exactly 50 (0/30 runs lost updates). A read in one query followed by a write in another is still **not** atomic, so use CAS.
+- **[tested] ⚠️ Parallel `MERGE` WITHOUT an index creates duplicates:** 21/30 runs on a new graph, 16/30 on an existing one, up to 50 copies of one key. With a range index: 0/100. With index + **unique constraint**: 0/30 duplicates, and losing writers get `unique constraint violation on node of type Signal`, which means "already exists". **Rule: every key we MERGE on (Signal.key, Incident.id, Service.name) gets an index + unique constraint, created before any parallel writes; treat the violation error as success.** Docs say only one write runs at a time per graph, so the matching part of MERGE apparently isn't covered by that (observed, not explained).
+- **[tested]** CAS handoff with 50 parallel agents: exactly 1 winner in 30/30 runs.
+- **[tested] ⚠️ The image sets `MAX_QUEUED_QUERIES 25`:** 50 simultaneous writers sometimes get `Max pending queries exceeded`. Writers must back off and retry (tests/test_smoke.py `_parallel`), or raise it with `GRAPH.CONFIG SET MAX_QUEUED_QUERIES <n>` (lost on restart). The image also passes `TIMEOUT 1000` (deprecated param): watch for 1 s query timeouts on heavy traversals [unknown whether it applies].
 - **[inferred]** Graphs are independent keys, so writes to *different* tenants' graphs can proceed in parallel while writes to one graph serialize. Test it (step 10), don't claim it before.
 
 #### 3.6.1 What this means for NextTrace
@@ -162,7 +165,7 @@ Write one script with asserts. Each line is one check:
 - **Done when:** `docs/data_notes.md` answers the four questions in project_plan.md §3.1.
 - **If the injection time is missing:** use the split point the RCAEval loaders use, or go to the synthetic fallback (project_plan.md §3.4).
 
-**S3. Topology and anonymization (45 min)**
+**S3. Topology and anonymization (45 min)** ✅ done Oct 15: `nexttrace/topology.py` (Python data + `UNWIND ... MERGE` Cypher instead of a .cypher file), `nexttrace/data.py` loader, `tests/test_topology_and_data.py`. Exploratory graph-rule check in docs/data_notes.md
 1. Open https://github.com/GoogleCloudPlatform/microservices-demo and copy the call edges from its architecture diagram. Compare with project_plan.md §3.2, which was written from memory.
 2. Write `topology/online_boutique.cypher` using one `MERGE` per service, then one per edge. Add `owner_team`, `tier`, `user_function`.
 3. Create `anonymize.py`: a fixed seeded mapping `real → svc-a…`, saved to a file.
@@ -230,5 +233,7 @@ One HTML page + Cytoscape.js: case picker, graph with red nodes and highlighted 
 | Oct 15 | Persistence: stop ✅; kill ❌ by default → **AOF on** → kill ✅ | demo restarts must not lose memory |
 | Oct 15 | RE1-OB: label = folder name; injection time = `inject_time.txt` (epoch s) | see docs/data_notes.md |
 | Oct 15 | Naive no-graph baseline scores 83% Acc@1 / 92% Acc@3 | add it as setup D; graph must beat it; loss faults are the weak spot (9/25) |
+| Oct 15 | Graph rules reach at most 108/125 (86%) on RE1-OB (exploratory) | story = path, impact, memory, coordination, isolation; accuracy reported as on par / slightly better |
+| Oct 15 | MERGE keys get index + unique constraint; writers retry on queue-full | parallel MERGE without index made duplicates; image caps queue at 25 |
 | | Day 1 checkpoint outcome | |
 | | Tenant scale reached (N graphs, MB each) | |

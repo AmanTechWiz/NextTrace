@@ -33,3 +33,16 @@ Rule: per service take the max |post-mean - pre-mean| / pre-std across its metri
 2. With only 5 possible answers, the memory experiment is easier than it looks: report cold vs warm honestly and don't oversell it.
 3. Loader: drop `time.*`, normalize metric names, split at `inject_time.txt`, handle 721 / 4201 / 2827 row lengths.
 4. Replay feeder: 1 row = 1 second, so 720 s (or 4200 s) per case; replay speed must be configurable.
+
+## S3 exploratory check: does the map fix the misses? (Oct 15)
+Map: Online Boutique, 11 services, 15 CALLS edges, from the manifests' `*_ADDR` settings (matches Google's diagram). `main` and `frontend-external` dropped (not services in the map).
+Same per-service z-scores as the naive baseline; "anomalous" = z >= frac x the case's max z. Rules tried (all on all 125 cases, so **exploratory, not the benchmark**):
+
+| Rule | frac | Acc@1 | fixed / broke vs naive | loss |
+|---|---|---|---|---|
+| naive: biggest z (no graph) | – | 104 | – | 9 |
+| deepest anomalous (fewest anomalous deps), then z | 0.05–0.5 | 102–106 | 4–7 / 2–9 | 10–11 |
+| most anomalous callers explained, then z | 0.1 / 0.3 | 103 / 107 | 7/8, 5/2 | 11 |
+| z x (1+explains)/(1+badDeps) | 0.1 / 0.3 | **108** / 106 | 7/3, 4/2 | 12 / 10 |
+
+**Takeaway:** on this 11-service dataset the map adds at most about +4 cases of accuracy (83% → 86%), and that best number was picked after seeing results. Leaf services always have zero anomalous dependencies, so "deepest anomalous" mostly picks the noisiest leaf. **Accuracy alone is not a strong story here.** Day 1 checkpoint is effectively decided early: lead with what the graph gives that a flat rule can't (the path, blast radius and owners, memory across sessions, safe multi-agent coordination, per-tenant isolation) and report accuracy honestly as "on par or slightly better". Optional upside: RE1-TT (Train Ticket, larger map) may show a bigger gap; that's a hypothesis, not a result.

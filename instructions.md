@@ -2,7 +2,19 @@
 
 Read this first. It is the single source of context for the hackathon and the project.
 
-**Status:** building started **Oct 15, 2026, 2:10 PM IST**. S0 + S1 done (see BUILD_GUIDE.md). Detailed build plan: [project_plan.md](project_plan.md). Verified FalkorDB facts + step-by-step build order: [BUILD_GUIDE.md](BUILD_GUIDE.md) (start here when building). Primer on graph DBs/Cypher for the builder: [graph-db-explained.html](graph-db-explained.html).
+**Status:** building started **Oct 15, 2026, 2:10 PM IST**. S0 to S3 done; next is S4 (see BUILD_GUIDE.md and roadmap.html). Detailed build plan: [project_plan.md](project_plan.md). Verified FalkorDB facts + step-by-step build order: [BUILD_GUIDE.md](BUILD_GUIDE.md) (start here when building). Primer on graph DBs/Cypher for the builder: [graph-db-explained.html](graph-db-explained.html).
+
+## Github commit and push instructions 
+
+Git commit rules:
+•⁠  ⁠Commit small and often, one logical change per commit, right after it works. Never one giant commit.
+•⁠  ⁠Subject line: imperative mood, under 60 characters, no trailing period. Examples: "Add graph schema for services", "Fix empty result in path query", "Wire up demo button".
+•⁠  ⁠Optional short body only when the why isn't obvious. Plain sentences, no bullet lists.
+•⁠  ⁠Write like a busy human developer: specific and plain. Name the actual thing changed. No filler words like "enhance", "streamline", "robust", "comprehensive".
+•⁠  ⁠No emojis, no em dashes, no "Co-authored-by" or "Generated with" trailers, no mention of AI in commit messages.
+•⁠  ⁠Never commit broken code, secrets, .env files, or large generated files. Check git status and the diff before every commit.
+•⁠  ⁠Do not rewrite history, squash, amend published commits or backdate. Real timestamps only.
+•⁠  ⁠Mix of types is fine and natural: features, fixes, small refactors, docs, tests.
 
 ## 1. The event
 
