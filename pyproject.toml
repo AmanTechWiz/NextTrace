@@ -1,7 +1,7 @@
 [project]
 name = "nexttrace"
 version = "0.1.0"
-description = "Add your description here"
+description = "Finds which service failed first, who it hurts, and what fixed it last time, using a FalkorDB graph."
 requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.8.0",
@@ -13,3 +13,6 @@ dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
