@@ -35,7 +35,7 @@ class Call:
     callee: str
     method: str    # "" when unknown, RPC for gRPC
     path: str
-    open_end: bool  # URL continues with "+ id": the last segment is filled at runtime
+    open_end: int   # runtime path segments that follow: "/order/" + date + "/" + id -> 2; 0 = none
     where: str
     text: str
 
@@ -156,12 +156,23 @@ def _method_near(lines, i):
 QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'|`[^`]*`")
 
 
+def _segments(rest):
+    """Runtime segments after a URL literal: `+ a + "/" + b` -> 2."""
+    return 1 + len(re.findall(r"\+\s*[\"'`]/[\"'`]", rest))
+
+
 def _usage(line, var):
     """`base + "/x" + id` -> ("/x", open_end=True) for each use of `var` outside string literals on the line."""
     strings = [q.span() for q in QUOTED.finditer(line)]
     for u in re.finditer(rf"(?<![\w.]){re.escape(var)}\b((?:\s*\+\s*[\"'`][^\"'`]*[\"'`])*)(\s*\+\s*[\w(])?", line):
         if not any(a <= u.start() < b for a, b in strings):
             yield "".join(re.findall(r"[\"'`]([^\"'`]*)[\"'`]", u.group(1))), bool(u.group(2))
+
+
+def _client_var(g, line):
+    """`cl := pb.NewXClient(conn)` names a client; `q, err := pb.NewXClient(c).GetQuote(...)` names a result."""
+    chained = g.re is GO_CLIENT and (g.group(3) or line.rstrip().endswith("."))
+    return bool(g.group(1)) and not chained
 
 
 def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
@@ -176,7 +187,9 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
             continue
         for f in _files(repo / s["source_dir"], CODE_EXT):
             rel, lines = _rel(repo, f), f.read_text(errors="ignore").splitlines()
-            stubs = {}  # variable -> proto service, for `stub.GetCart(` later in the file
+            # variable -> proto service, collected first: a stub made in main() is often used in a function above it
+            stubs = {g.group(1): g.group(2) for line in lines for g in [PY_STUB.search(line) or GO_CLIENT.search(line)]
+                     if g and _client_var(g, line)}
             consts = {}  # var -> [(callee, path, open_end, where, text)]; if/else may assign several URLs
             used, fresh = set(), {}  # fresh[var]: used since its last assignment
             for i, line in enumerate(lines):
@@ -184,7 +197,8 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
                     continue
                 where, text = f"{rel}:{i + 1}", line.strip()[:160]
                 for hit in list(url.finditer(line)) + list(named.finditer(line)):
-                    callee, path, plus = hit.group(1), hit.group(2) or "/", bool(hit.group(3))
+                    callee, path = hit.group(1), hit.group(2) or "/"
+                    plus = _segments(line[hit.end():]) if hit.group(3) else 0
                     if callee == caller:
                         continue
                     # a URL kept in a variable: the call happens where the variable is used (that's where the method is)
@@ -211,7 +225,7 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
                                          open_end or (base_open and not tail), where, text))
                 for g in GO_CLIENT.finditer(line):
                     var, svc, rpc = g.groups()
-                    if var:
+                    if _client_var(g, line):
                         stubs[var] = svc
                     if not rpc and i + 1 < len(lines) and line.rstrip().endswith("."):
                         nxt = re.match(r"\s*(\w+)\s*\(", lines[i + 1])
@@ -261,8 +275,11 @@ def link(found_calls, all_routes):
                     is_param = lambda p: bool(re.fullmatch(r"\{[^}]*\}|:\w+|<[^>]*>", p))
                     ok = len(want) > len(have) and all(is_param(w) or w == h for w, h in zip(want, have)) \
                         and all(is_param(w) for w in want[len(have):])
-            if ok and (best is None or (r.method != "ANY", -r.path.count("{")) > (best.method != "ANY", -best.path.count("{"))):
-                best = r
+            if ok:
+                extra = len([p for p in r.path.split("/") if p]) - len([p for p in c.path.split("/") if p])
+                score = (r.method != "ANY", not c.open_end or extra == c.open_end, -r.path.count("{"))
+                if best is None or score > best_score:
+                    best, best_score = r, score
         out.append((c, best))
     return out
 

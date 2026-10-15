@@ -172,3 +172,32 @@ def test_train_ticket_links_and_flags_the_post_delete_mismatch():
     # deleteOrder() POSTs to /order/{id}, which only accepts DELETE: a real mismatch in the code
     assert unmatched == {("ts-rebook-service", "ts-order-service", "POST"),
                          ("ts-rebook-service", "ts-order-other-service", "POST")}
+
+
+def test_runtime_segments_stub_order_and_go_results(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n  orders: {build: ./orders}\n  travel: {build: ./travel}\n"
+                              "  catalog: {build: ./catalog}\n  recs: {build: ./recs}\n  checkout: {build: ./checkout}\n",
+        "orders/src/main/java/OrderController.java": """
+@RequestMapping("/order")
+public class OrderController {
+    @GetMapping(path = "/{orderId}")
+    public Order one() {}
+    @GetMapping(path = "/{travelDate}/{trainNumber}")
+    public List sold() {}
+}
+""",
+        "travel/src/main/java/T.java": ('rest.exchange("http://orders/order/" + date + "/" + trip.getId(),\n'
+                                        '    HttpMethod.GET, e, R.class);\n'),
+        "protos/demo.proto": "service CatalogService {\n  rpc ListProducts(E) returns (L) {}\n}\n",
+        "recs/server.py": ("def handler():\n    return stub.ListProducts(req)\n\n"
+                           "if __name__ == '__main__':\n    stub = demo_pb2_grpc.CatalogServiceStub(channel)\n"),
+        "checkout/main.go": ("q, err := pb.NewCatalogServiceClient(conn).ListProducts(ctx, r)\n"
+                             "if err != nil { return err.Error() }\n"),
+    })
+    _, _, pairs = run(repo)
+    assert linked(pairs) == {
+        ("travel", "orders GET /order/{travelDate}/{trainNumber}"),  # two "/"-joined runtime parts, not /{orderId}
+        ("recs", "catalog RPC CatalogService/ListProducts"),        # stub made in main(), used in a function above
+        ("checkout", "catalog RPC CatalogService/ListProducts"),    # err is a result, so err.Error() is no RPC
+    }
