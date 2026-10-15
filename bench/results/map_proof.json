@@ -65,8 +65,8 @@
           }
         ],
         "not_checkable": {
-          "caller has no spans in these traces": 68,
           "callee is a datastore or infra (not traced)": 30,
+          "caller has no spans in these traces": 68,
           "callee has no spans in these traces": 1
         }
       },
@@ -82,14 +82,14 @@
             "caller": "ts-rebook-service",
             "callee": "ts-order-other-service",
             "method": "POST",
-            "path": "/api/v1/orderOtherService/orderOther/",
+            "path": "/api/v1/orderOtherService/orderOther/{}",
             "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340"
           },
           {
             "caller": "ts-rebook-service",
             "callee": "ts-order-service",
             "method": "POST",
-            "path": "/api/v1/orderservice/order/",
+            "path": "/api/v1/orderservice/order/{}",
             "link": "https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340"
           }
         ]
@@ -119,8 +119,8 @@
         "seen_in_traffic": 9,
         "unseen": [],
         "not_checkable": {
-          "callee is a datastore or infra (not traced)": 1,
           "callee has no spans in these traces": 6,
+          "callee is a datastore or infra (not traced)": 1,
           "caller has no spans in these traces": 1
         }
       },

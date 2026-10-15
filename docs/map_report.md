@@ -21,7 +21,7 @@ Repo `train-ticket` at commit `350f62000e`. Traffic: 10 recorded runs, 291,342 c
 - Missed: none.
 - Seen in traffic between services the repo doesn't declare: none.
 - The map has 160 calls. 61 can be checked against this traffic (both services ran and were traced); 55/61 (90%) of those were seen.
-- Not checkable: 68 (caller has no spans in these traces), 30 (callee is a datastore or infra (not traced)), 1 (callee has no spans in these traces).
+- Not checkable: 30 (callee is a datastore or infra (not traced)), 68 (caller has no spans in these traces), 1 (callee has no spans in these traces).
 
 **Endpoint level**
 
@@ -29,8 +29,8 @@ Repo `train-ticket` at commit `350f62000e`. Traffic: 10 recorded runs, 291,342 c
 - Endpoint calls seen in traffic and found in the map: **63/63 (100%)**.
 - Missed: none.
 - Calls to a route the callee does not declare (likely bugs):
-  - `ts-rebook-service` sends `POST /api/v1/orderOtherService/orderOther/…` to `ts-order-other-service` — [code](https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340)
-  - `ts-rebook-service` sends `POST /api/v1/orderservice/order/…` to `ts-order-service` — [code](https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340)
+  - `ts-rebook-service` sends `POST /api/v1/orderOtherService/orderOther/{}…` to `ts-order-other-service` — [code](https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340)
+  - `ts-rebook-service` sends `POST /api/v1/orderservice/order/{}…` to `ts-order-service` — [code](https://github.com/FudanSELab/train-ticket/blob/350f62000e6658e0e543730580c599d8558253e7/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java#L340)
 
 <details><summary>6 mapped calls not seen in this traffic (each with its code line)</summary>
 
@@ -53,7 +53,7 @@ Repo `boutique` at commit `38e7348eb2`. Traffic: 5 recorded runs, 851,748 cross-
 - Missed: none.
 - Seen in traffic between services the repo doesn't declare: none.
 - The map has 17 calls. 9 can be checked against this traffic (both services ran and were traced); 9/9 (100%) of those were seen.
-- Not checkable: 1 (callee is a datastore or infra (not traced)), 6 (callee has no spans in these traces), 1 (caller has no spans in these traces).
+- Not checkable: 6 (callee has no spans in these traces), 1 (callee is a datastore or infra (not traced)), 1 (caller has no spans in these traces).
 
 **Endpoint level**
 
