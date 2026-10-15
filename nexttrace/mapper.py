@@ -336,6 +336,10 @@ def map_repo(path, graph_name=None, traces=(), host="localhost", port=6379) -> d
         for t in traces:
             unknown += add_traces(m, pd.read_csv(t, usecols=["spanID", "parentSpanID", "serviceName"]), Path(t).name)
     summary = write(graph, m)
+    from nexttrace import endpoints  # imports this module, so import late
+    own, grpc_owner = endpoints.routes(path, m)
+    linked = endpoints.link(endpoints.calls(path, m, grpc_owner), own + endpoints.existing_routes(graph, m.repo))
+    summary.update(endpoints.write(graph, m, own, linked, summary["run"]))
     summary["graph"] = graph.name
     summary["observed_but_undeclared"] = [f"{a} -> {b} ({n})" for (a, b), n in unknown.most_common(20)]
     return summary
