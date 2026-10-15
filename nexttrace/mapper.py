@@ -91,9 +91,16 @@ def _line_of(f, needle):
     return 0
 
 
+def _git(repo, *args) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True).stdout.strip()
+
+
 def _commit(repo: Path) -> str:
-    r = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True)
-    return r.stdout.strip() or "unversioned"
+    """The commit of the code being mapped. Not the commit of a parent repo that doesn't track these files."""
+    if _git(repo, "ls-files", "--", "."):  # tracked by the enclosing repo (the repo itself, or a monorepo folder)
+        return _git(repo, "rev-parse", "HEAD")
+    nested = [d for d in sorted(repo.iterdir()) if (d / ".git").exists()]  # a folder of separate repos
+    return ",".join(f"{d.name}@{_git(d, 'rev-parse', '--short', 'HEAD')}" for d in nested) or "unversioned"
 
 
 # ---------- readers: where services are declared ----------

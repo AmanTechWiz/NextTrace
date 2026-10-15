@@ -201,3 +201,61 @@ public class OrderController {
         ("recs", "catalog RPC CatalogService/ListProducts"),        # stub made in main(), used in a function above
         ("checkout", "catalog RPC CatalogService/ListProducts"),    # err is a result, so err.Error() is no RPC
     }
+
+
+def test_config_module_urls_placeholders_chains_and_prefix_routes(tmp_path):
+    # Sock Shop style: URLs live in one module with a %s domain, other files use them as `endpoints.x + "/" + id`
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n  web: {build: ./web}\n  carts: {build: ./carts}\n  user: {build: ./user}\n",
+        "web/api/endpoints.js": ('module.exports = {\n'
+                                 '  cartsUrl: util.format("http://carts%s/carts", domain),\n'
+                                 '  customersUrl: util.format("http://user%s/customers", domain),\n};\n'),
+        "web/api/cart.js": ('request({uri: endpoints.cartsUrl + "/" + custId + "/items", method: "POST"});\n'
+                            'var cartsUrl = "unrelated";\nlog(cartsUrl);\n'),  # an unqualified local name is not the config URL
+        "web/api/user.js": 'get(endpoints.customersUrl + "/" + id);\nproxy(endpoints.customersUrl + req.url);\n',
+        "carts/src/main/java/CartsController.java": (
+            '@RequestMapping("/carts")\npublic class CartsController {\n'
+            '  @PostMapping("/{customerId:.*}/items") public void add() {}\n'
+            '  @PostMapping("/admin/items") public void admin() {}\n}\n'),
+        "user/transport.go": ('r.Methods("GET").PathPrefix("/customers").Handler(h)\n'
+                              'r.Methods("GET").PathPrefix("/").Handler(h)\n'),
+    })
+    _, routes, pairs = run(repo)
+    assert "user GET /customers/**" in {r.key for r in routes}
+    got = {(c.caller, c.path, r.key if r else None) for c, r in pairs}
+    assert got == {
+        ("web", "/carts/{}/items", "carts POST /carts/{customerId:.*}/items"),  # runtime id fills the param, not "admin"
+        ("web", "/customers/{}", "user GET /customers/**"),                     # most specific prefix wins over "/"
+        ("web", "/customers{}", "user GET /**"),                                # runtime text glued on: only the catch-all fits
+    }
+
+
+def test_runtime_value_never_fills_a_fixed_route_word(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": "services:\n  rebook: {build: ./rebook}\n  orders: {build: ./orders}\n",
+        "orders/src/main/java/OrderController.java": (
+            '@RequestMapping("/order")\npublic class OrderController {\n'
+            '  @DeleteMapping("/{orderId}") public void drop() {}\n'
+            '  @PostMapping("/admin") public void admin() {}\n}\n'),
+        "rebook/src/main/java/R.java": 'rest.exchange("http://orders/order/" + orderId, HttpMethod.POST, e, R.class);\n',
+    })
+    _, _, pairs = run(repo)
+    (c, r), = pairs
+    assert (c.method, c.path, r) == ("POST", "/order/{}", None)  # flagged: POST to a DELETE-only route
+
+
+def test_commit_is_the_mapped_codes_own(tmp_path):
+    import subprocess
+
+    def git_repo(d):
+        d.mkdir(parents=True)
+        (d / "Dockerfile").write_text("FROM x")
+        for args in (["init", "-q"], ["add", "."], ["-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "x"]):
+            subprocess.run(["git", "-C", str(d), *args], check=True)
+        return subprocess.run(["git", "-C", str(d), "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+    a, b = git_repo(tmp_path / "ws" / "a"), git_repo(tmp_path / "ws" / "b")
+    assert mapper._commit(tmp_path / "ws") == f"a@{a},b@{b}"           # a folder of separate repos
+    assert mapper._commit(tmp_path / "ws" / "a").startswith(a)         # a repo itself
+    (tmp_path / "plain").mkdir()
+    assert mapper._commit(tmp_path / "plain") == "unversioned"

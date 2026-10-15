@@ -35,7 +35,7 @@ class Call:
     callee: str
     method: str    # "" when unknown, RPC for gRPC
     path: str
-    open_end: int   # runtime path segments that follow: "/order/" + date + "/" + id -> 2; 0 = none
+    open_end: int   # runtime parts in the path ("{}"): "/order/" + date + "/" + id -> 2
     where: str
     text: str
 
@@ -47,7 +47,7 @@ SPRING_PATH = re.compile(r"(?:value|path)\s*=\s*\{?\s*\"([^\"]*)\"|^\(\s*\{?\s*\
 EXPRESS = re.compile(r"\b(?:app|router|api|server)\.(get|post|put|delete|patch|all)\(\s*[\"'`]([^\"'`]+)[\"'`]")
 FLASK = re.compile(r"@\w+\.route\(\s*[\"']([^\"']+)[\"'](.*)")
 FASTAPI = re.compile(r"@\w+\.(get|post|put|delete|patch)\(\s*[\"']([^\"']+)[\"']")
-GO_MUX = re.compile(r"Methods\(\s*\"(\w+)\"\s*\)\.Path\(\s*\"([^\"]+)\"|\.Path\(\s*\"([^\"]+)\"\s*\)\.Methods\(\s*\"(\w+)\"")
+GO_MUX = re.compile(r"Methods\(\s*\"(\w+)\"\s*\)\.(Path(?:Prefix)?)\(\s*\"([^\"]+)\"|\.(Path(?:Prefix)?)\(\s*\"([^\"]+)\"\s*\)\.Methods\(\s*\"(\w+)\"")
 GO_HANDLE = re.compile(r"HandleFunc\(\s*\"([^\"]+)\"(.*)")
 PROTO_SVC = re.compile(r"^\s*service\s+(\w+)\s*\{")
 PROTO_RPC = re.compile(r"^\s*rpc\s+(\w+)\s*\(")
@@ -93,8 +93,8 @@ def _line_routes(service, f, rel):
             methods = re.findall(r"[\"'](GET|POST|PUT|DELETE|PATCH)[\"']", m.group(2).upper()) or ["GET"]
             out += [Route(service, mt, m.group(1), where) for mt in methods]
         for m in GO_MUX.finditer(line):
-            method, path = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
-            out.append(Route(service, method.upper(), path, where))
+            method, kind, path = m.group(1, 2, 3) if m.group(1) else (m.group(6), m.group(4), m.group(5))
+            out.append(Route(service, method.upper(), path.rstrip("/") + "/**" if kind == "PathPrefix" else path, where))
         m = GO_HANDLE.search(line)
         if m:
             mm = re.search(r"Methods\(\s*\"(\w+)\"", m.group(2))
@@ -156,17 +156,44 @@ def _method_near(lines, i):
 QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'|`[^`]*`")
 
 
-def _segments(rest):
-    """Runtime segments after a URL literal: `+ a + "/" + b` -> 2."""
-    return 1 + len(re.findall(r"\+\s*[\"'`]/[\"'`]", rest))
+CHAIN = re.compile(r"""\s*\+\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`|[\w$.]+(?:\([^()]*\))*(?:\.[\w$]+(?:\([^()]*\))*)*)""")
 
 
-def _usage(line, var):
-    """`base + "/x" + id` -> ("/x", open_end=True) for each use of `var` outside string literals on the line."""
+def _chain(rest):
+    """`+ id + "/items"` after a URL -> "{}/items": literals kept, runtime values become {}."""
+    out, pos = [], 0
+    while m := CHAIN.match(rest, pos):
+        lit = next((g for g in m.groups() if g is not None), None)
+        out.append("{}" if lit is None else lit)
+        pos = m.end()
+    return "".join(out)
+
+
+def _path(base, tail=""):
+    """Normalize a call path: drop query, runtime parts (${x}, {x}, %s) become {}."""
+    p = re.split(r"[?#]", base + tail)[0]
+    p = re.sub(r"\$\{[^}]*\}|\{[^}]*\}|%[sdv]", "{}", p)
+    return "/" + "/".join(x for x in p.split("/") if x)
+
+
+def _after(hit):
+    """Position right after the URL's closing quote (the optional `+` belongs to the chain)."""
+    return hit.end() - len(hit.group(3) or "")
+
+
+DECL = re.compile(r"(\w+)\s*(?::|:?=)\s*(?:[\w.]+\()?[\"'`]$")  # `url = "`, `url := "`, `cartsUrl: util.format("`
+
+
+def _usage(line, var, qualified=False):
+    """`base + "/x" + id` -> "/x/{}" for each use of `var` outside string literals on the line.
+
+    qualified: only `config.var` counts (a URL defined in another file and used through its module or class).
+    """
     strings = [q.span() for q in QUOTED.finditer(line)]
-    for u in re.finditer(rf"(?<![\w.]){re.escape(var)}\b((?:\s*\+\s*[\"'`][^\"'`]*[\"'`])*)(\s*\+\s*[\w(])?", line):
+    prefix = r"(?<=[\w)\]]\.)" if qualified else r"(?<![\w.])"
+    for u in re.finditer(prefix + re.escape(var) + r"\b", line):
         if not any(a <= u.start() < b for a, b in strings):
-            yield "".join(re.findall(r"[\"'`]([^\"'`]*)[\"'`]", u.group(1))), bool(u.group(2))
+            yield _chain(line[u.end():])
 
 
 def _client_var(g, line):
@@ -179,14 +206,25 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
     # endpoints only for API services; datastore URLs (mongodb://db/name) have no routes
     names = sorted({n for n, s in m.services.items() if s["kind"] == "service"} | m.known, key=len, reverse=True)
     alts = "|".join(re.escape(n) for n in names)
-    url = re.compile(rf"[a-z]+://({alts})(?::\d+)?(/[^\"'\s`?#]*)?(?:[?#][^\"'`]*)?[\"'`](\s*\+)?")
+    # `%s` / `${domain}` after the host: `util.format("http://carts%s/carts", domain)`
+    url = re.compile(rf"[a-z]+://({alts})(?::\d+)?(?:%[sv]|\$\{{[^}}]*\}}|\{{\w*\}})?(/[^\"'\s`?#]*)?(?:[?#][^\"'`]*)?[\"'`](\s*\+)?")
     named = re.compile(rf"[\"']({alts})[\"']\s*\)\s*\+\s*[\"'](/[^\"']*)[\"'](\s*\+)?")  # getServiceUrl("x") + "/path"
     out = set()
     for caller, s in m.services.items():
         if not s["source_dir"]:
             continue
-        for f in _files(repo / s["source_dir"], CODE_EXT):
-            rel, lines = _rel(repo, f), f.read_text(errors="ignore").splitlines()
+        files = [(f, _rel(repo, f), f.read_text(errors="ignore").splitlines()) for f in _files(repo / s["source_dir"], CODE_EXT)]
+        # URLs defined in one file (a config module) and used as `config.name` in others
+        shared = {}
+        for _, rel, lines in files:
+            for i, line in enumerate(lines):
+                for hit in url.finditer(line):
+                    d = DECL.search(line[:hit.start()])
+                    if d and hit.group(1) != caller and not line.lstrip().startswith(COMMENT):
+                        path = _path(hit.group(2) or "/", _chain(line[_after(hit):]))
+                        shared.setdefault(d.group(1), []).append((hit.group(1), path, path.count("{}"), f"{rel}:{i + 1}", line.strip()[:160]))
+        shared_used, unused = set(), []
+        for f, rel, lines in files:
             # variable -> proto service, collected first: a stub made in main() is often used in a function above it
             stubs = {g.group(1): g.group(2) for line in lines for g in [PY_STUB.search(line) or GO_CLIENT.search(line)]
                      if g and _client_var(g, line)}
@@ -197,12 +235,13 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
                     continue
                 where, text = f"{rel}:{i + 1}", line.strip()[:160]
                 for hit in list(url.finditer(line)) + list(named.finditer(line)):
-                    callee, path = hit.group(1), hit.group(2) or "/"
-                    plus = _segments(line[hit.end():]) if hit.group(3) else 0
+                    callee = hit.group(1)
+                    path = _path(hit.group(2) or "/", _chain(line[_after(hit):]))
+                    plus = path.count("{}")
                     if callee == caller:
                         continue
                     # a URL kept in a variable: the call happens where the variable is used (that's where the method is)
-                    decl = re.search(r"(\w+)\s*:?=\s*[\"'`]$", line[:hit.start()])
+                    decl = DECL.search(line[:hit.start()])
                     if decl:
                         var = decl.group(1)
                         if fresh.get(var):  # used since its last assignment: this is a new value, not an if/else branch
@@ -217,12 +256,19 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
                 for var, entries in consts.items():
                     if any(where == e[3] for e in entries):
                         continue
-                    for tail, open_end in _usage(line, var):
+                    for tail in _usage(line, var):
                         used.add(var)
                         fresh[var] = True
-                        for callee, base, base_open, _, _ in entries:
-                            out.add(Call(caller, callee, _method_near(lines, i), base.rstrip("/") + tail if tail else base,
-                                         open_end or (base_open and not tail), where, text))
+                        for callee, base, _, _, _ in entries:
+                            full = _path(base, tail)
+                            out.add(Call(caller, callee, _method_near(lines, i), full, full.count("{}"), where, text))
+                for var, entries in shared.items():
+                    for tail in _usage(line, var, qualified=True):
+                        shared_used.add(var)
+                        for callee, base, _, at, _ in entries:
+                            if not at.startswith(rel + ":"):
+                                full = _path(base, tail)
+                                out.add(Call(caller, callee, _method_near(lines, i), full, full.count("{}"), where, text))
                 for g in GO_CLIENT.finditer(line):
                     var, svc, rpc = g.groups()
                     if _client_var(g, line):
@@ -239,45 +285,45 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
                     for u in re.finditer(rf"\b{re.escape(var)}\.(\w+)\s*\(", line):
                         if grpc_owner.get(svc) and grpc_owner[svc] != caller and not u.group(1).startswith("_"):
                             out.add(Call(caller, grpc_owner[svc], "RPC", f"{svc}/{u.group(1)}", False, where, text))
-            for var, entries in consts.items():
-                if var not in used:  # assigned but never used in this file: keep it at the assignment line
-                    for callee, base, base_open, where, text in entries:
-                        out.add(Call(caller, callee, _method_near(lines, int(where.rsplit(":", 1)[1]) - 1), base, base_open, where, text))
+            unused += [(var, e, lines) for var, entries in consts.items() if var not in used for e in entries]
+        for var, (callee, base, base_open, where, text), lines in unused:
+            if var not in shared_used:  # never used anywhere: keep it at the assignment line
+                out.add(Call(caller, callee, _method_near(lines, int(where.rsplit(":", 1)[1]) - 1), base, base_open, where, text))
     return sorted(out)
 
 
 # ---------- linking ----------
 
-def _template_regex(path):
-    parts = [p for p in path.split("/") if p]
-    return re.compile("^/" + "/".join("[^/]+" if re.fullmatch(r"\{[^}]*\}|:\w+|<[^>]*>", p) else re.escape(p)
-                                      for p in parts) + "/?$")
+PARAM = re.compile(r"\{[^}]*\}|:\w+|<[^>]*>")
+
+
+def _matches(call_path, route_path):
+    c, r = [x for x in call_path.split("/") if x], [x for x in route_path.split("/") if x]
+    prefix = bool(r) and r[-1] == "**"
+    if prefix:
+        r = r[:-1]
+    if len(c) < len(r) or (not prefix and len(c) != len(r)):
+        return False
+    # a runtime value fills a route parameter, never a fixed word: "/order/" + id is not "/order/admin"
+    return all(PARAM.fullmatch(b) or (a == b and "{}" not in a) for a, b in zip(c, r))
 
 
 def link(found_calls, all_routes):
-    """(call, route or None) for every call. A route matches when service, method and path template agree."""
+    """(call, route or None) for every call. A route matches when service, method and path segments agree."""
     by_service = {}
     for r in all_routes:
         by_service.setdefault(r.service, []).append(r)
     out = []
     for c in found_calls:
-        best = None
+        best = best_score = None
         for r in by_service.get(c.callee, []):
             if c.method == "RPC" or r.method == "RPC":
                 ok = c.method == r.method == "RPC" and c.path == r.path
             else:
-                if c.method and r.method != "ANY" and c.method != r.method:
-                    continue
-                # ".../routes/" + id: a segment follows, so "/routes" itself is not the target
-                ok = not (c.open_end and c.path.endswith("/")) and bool(_template_regex(r.path).match(c.path))
-                if not ok and c.open_end:  # "+ id + "/" + x": runtime values fill the route's trailing params
-                    have, want = [p for p in c.path.split("/") if p], [p for p in r.path.split("/") if p]
-                    is_param = lambda p: bool(re.fullmatch(r"\{[^}]*\}|:\w+|<[^>]*>", p))
-                    ok = len(want) > len(have) and all(is_param(w) or w == h for w, h in zip(want, have)) \
-                        and all(is_param(w) for w in want[len(have):])
-            if ok:
-                extra = len([p for p in r.path.split("/") if p]) - len([p for p in c.path.split("/") if p])
-                score = (r.method != "ANY", not c.open_end or extra == c.open_end, -r.path.count("{"))
+                ok = (not c.method or r.method in ("ANY", c.method)) and _matches(c.path, r.path)
+            if ok:  # most specific wins: exact method, exact path (not a prefix), fewest params
+                fixed = sum(1 for x in r.path.split("/") if x and x != "**" and not PARAM.fullmatch(x))
+                score = (r.method != "ANY", not r.path.endswith("/**"), fixed, -len(PARAM.findall(r.path)))
                 if best is None or score > best_score:
                     best, best_score = r, score
         out.append((c, best))
