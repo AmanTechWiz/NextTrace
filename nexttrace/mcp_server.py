@@ -112,19 +112,58 @@ def list_maps() -> list[dict[str, Any]]:
     return out
 
 
+def _require_service(g, graph, service):
+    if g.ro_query("MATCH (s:Service {name: $name}) RETURN count(s)", {"name": service}).result_set[0][0]:
+        return
+    names = [r[0] for r in g.ro_query("MATCH (s:Service) RETURN s.name ORDER BY s.name").result_set]
+    close = [n for n in names if service.lower() in n.lower()][:10]
+    raise ToolError(f"no service {service!r} in graph {graph!r}" + (f"; did you mean {close}?" if close else ""))
+
+
 @server.tool(annotations=ToolAnnotations(title="Service connections", read_only_hint=True), structured_output=True)
 @_friendly
 def service_calls(graph: str, service: str) -> dict[str, Any]:
     """What a service calls and what calls it, each with confidence and evidence (file:line or traffic count)."""
     g = _db().select_graph(_graph_name(graph))
+    _require_service(g, graph, service)
     rows = g.ro_query(SERVICE_CALLS, {"name": service}).result_set
-    if not rows:
-        names = [r[0] for r in g.ro_query("MATCH (s:Service) RETURN s.name ORDER BY s.name").result_set]
-        close = [n for n in names if service.lower() in n.lower()][:10]
-        raise ToolError(f"no service {service!r} in graph {graph!r}" + (f"; did you mean {close}?" if close else ""))
     kind, owner, repo, source_dir, stale, calls, called_by = rows[0]
     return {"service": service, "kind": kind, "owner": owner, "repo": repo, "source_dir": source_dir, "stale": stale,
             "calls": sorted(calls, key=lambda c: c["service"]), "called_by": sorted(called_by, key=lambda c: c["service"])}
+
+
+
+ENDPOINTS = """
+MATCH (s:Service {name: $name})-[:EXPOSES]->(e:Endpoint)
+WHERE $path = '' OR e.path CONTAINS $path
+OPTIONAL MATCH (caller:Service)-[c:CALLS_ENDPOINT]->(e)
+RETURN e.method, e.path, e.where, e.declared, e.stale,
+       collect(CASE WHEN caller IS NULL THEN NULL ELSE {service: caller.name, evidence: c.evidence, stale: c.stale} END)
+ORDER BY e.path, e.method
+"""
+
+OUTGOING = """
+MATCH (s:Service {name: $name})-[c:CALLS_ENDPOINT]->(e:Endpoint)
+RETURN e.service, e.method, e.path, c.matched, c.evidence ORDER BY e.service, e.path
+"""
+
+
+@server.tool(annotations=ToolAnnotations(title="Endpoint callers", read_only_hint=True), structured_output=True)
+@_friendly
+def endpoint_calls(graph: str, service: str, path: str = "") -> dict[str, Any]:
+    """Routes a service exposes and who calls each one (file:line), plus the routes it calls in other services.
+
+    path: optional filter, e.g. "/seats" returns only routes whose path contains it.
+    A call with matched=false hits a route the callee doesn't declare: a likely bug or a stale call.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    _require_service(g, graph, service)
+    exposes = [{"method": m, "path": p, "where": w, "declared": d, "stale": st,
+                "called_by": sorted(c, key=lambda x: x["service"])}
+               for m, p, w, d, st, c in g.ro_query(ENDPOINTS, {"name": service, "path": path}).result_set]
+    calls = [{"service": sv, "method": m, "path": p, "matched": ok, "evidence": ev}
+             for sv, m, p, ok, ev in g.ro_query(OUTGOING, {"name": service}).result_set]
+    return {"service": service, "exposes": exposes, "calls": calls}
 
 
 if __name__ == "__main__":
