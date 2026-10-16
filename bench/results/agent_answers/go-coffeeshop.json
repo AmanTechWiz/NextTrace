@@ -1,0 +1,166 @@
+{
+  "graph": "go-coffeeshop",
+  "repos": {
+    "go-coffeeshop": "22d33190a0cf81630878e47bafae2de7c0abb783"
+  },
+  "services": [
+    {
+      "name": "barista",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "counter",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "kitchen",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "postgres",
+      "kind": "datastore",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "product",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "proxy",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "rabbitmq",
+      "kind": "datastore",
+      "repo": "go-coffeeshop"
+    },
+    {
+      "name": "web",
+      "kind": "service",
+      "repo": "go-coffeeshop"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "barista",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:4 | postgres",
+        "config | docker-compose.yaml:72 | postgres://postgres:P@ssw0rd@postgres:5432/postgres"
+      ]
+    },
+    {
+      "caller": "barista",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:17 | rabbitmq",
+        "config | docker-compose.yaml:74 | amqp://guest:guest@rabbitmq:5672/"
+      ]
+    },
+    {
+      "caller": "counter",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:4 | postgres",
+        "config | docker-compose.yaml:72 | postgres://postgres:P@ssw0rd@postgres:5432/postgres"
+      ]
+    },
+    {
+      "caller": "counter",
+      "callee": "product",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:75 | product:5001"
+      ]
+    },
+    {
+      "caller": "counter",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:17 | rabbitmq",
+        "config | docker-compose.yaml:74 | amqp://guest:guest@rabbitmq:5672/"
+      ]
+    },
+    {
+      "caller": "kitchen",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:4 | postgres",
+        "config | docker-compose.yaml:72 | postgres://postgres:P@ssw0rd@postgres:5432/postgres"
+      ]
+    },
+    {
+      "caller": "kitchen",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:17 | rabbitmq",
+        "config | docker-compose.yaml:74 | amqp://guest:guest@rabbitmq:5672/"
+      ]
+    },
+    {
+      "caller": "proxy",
+      "callee": "counter",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:42 | counter"
+      ]
+    },
+    {
+      "caller": "proxy",
+      "callee": "product",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:40 | product"
+      ]
+    },
+    {
+      "caller": "web",
+      "callee": "proxy",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yaml:33 | proxy"
+      ]
+    }
+  ]
+}

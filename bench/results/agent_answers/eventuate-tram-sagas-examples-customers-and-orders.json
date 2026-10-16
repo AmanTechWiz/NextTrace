@@ -1,0 +1,58 @@
+{
+  "graph": "eventuate-tram-sagas-examples-customers-and-orders",
+  "repos": {
+    "eventuate-tram-sagas-examples-customers-and-orders": "7f0ab8445fea5720d21fa3500d28e7e05d12cb7f"
+  },
+  "services": [
+    {
+      "name": "api-gateway-service-main",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "customer-service-main",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "order-service-main",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "api-gateway-service-main",
+      "callee": "customer-service-main",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | api-gateway-service/api-gateway-service-main/src/main/java/io/eventuate/examples/tram/sagas/customersandorders/apigateway/proxies/customerservice/CustomerServiceProxy.java:34 | .uri(customerServiceUrl + \"/customers/{customerId}\", customerId)"
+      ]
+    },
+    {
+      "caller": "api-gateway-service-main",
+      "callee": "order-service-main",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | api-gateway-service/api-gateway-service-main/src/main/java/io/eventuate/examples/tram/sagas/customersandorders/apigateway/proxies/orderservice/OrderServiceProxy.java:35 | .uri(orderDestinations.getOrderServiceUrl() + \"/orders/customer/{customerId}\", customerId)"
+      ]
+    },
+    {
+      "caller": "order-service-main",
+      "callee": "customer-service-main",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | order-service/order-service-proxies-customer-service/src/main/java/io/eventuate/examples/tram/sagas/customersandorders/orders/proxies/customers/CustomerServiceProxy.java:16 | public static final String CHANNEL = \"customerService\";"
+      ]
+    }
+  ]
+}

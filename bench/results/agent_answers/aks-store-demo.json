@@ -1,0 +1,333 @@
+{
+  "graph": "aks-store-demo",
+  "repos": {
+    "aks-store-demo": "3c3ba3bd999d0b2d78eece1adac84b712b7d9c4f"
+  },
+  "services": [
+    {
+      "name": "ai-service",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "documentdb",
+      "kind": "other",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "makeline-service",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "order-service",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "product-service",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "rabbitmq",
+      "kind": "datastore",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "store-admin",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "store-front",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "virtual-customer",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    },
+    {
+      "name": "virtual-worker",
+      "kind": "service",
+      "repo": "aks-store-demo"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "makeline-service",
+      "callee": "documentdb",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | aks-store-all-in-one.yaml:275 | mongodb://documentdb:10260/?tls=true&tlsAllowInvalidCertificates=true",
+        "config | docker-compose.yml:2 | documentdb",
+        "config | docker-compose.yml:87 | ORDER_DB_URI=mongodb://documentdb:10260/?tls=true&tlsAllowInvalidCertificates=true",
+        "config | kustomize/base/makeline-service.yaml:32 | mongodb://documentdb:10260/?tls=true&tlsAllowInvalidCertificates=true",
+        "config | src/store-admin/docker-compose.yml:3 | documentdb"
+      ]
+    },
+    {
+      "caller": "makeline-service",
+      "callee": "order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/makeline-service/docker-compose.yml:48 | \"http://order-service:3000/health\",",
+        "config | src/makeline-service/docker-compose.yml:69 | - ORDER_SERVICE_URL=http://order-service:3000/"
+      ]
+    },
+    {
+      "caller": "makeline-service",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | aks-store-all-in-one.yaml:267 | amqp://rabbitmq:5672",
+        "config | docker-compose.yml:16 | rabbitmq",
+        "config | docker-compose.yml:83 | ORDER_QUEUE_URI=amqp://rabbitmq:5672",
+        "config | kustomize/base/makeline-service.yaml:24 | amqp://rabbitmq:5672",
+        "config | src/makeline-service/docker-compose.yml:18 | image: rabbitmq:4.3.2-management-alpine"
+      ]
+    },
+    {
+      "caller": "order-service",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:16 | rabbitmq",
+        "config | src/makeline-service/docker-compose.yml:17 | rabbitmq",
+        "config | src/order-service/docker-compose.yml:4 | image: rabbitmq:4.3.2-management-alpine",
+        "config | src/store-admin/docker-compose.yml:17 | rabbitmq",
+        "config | src/store-front/docker-compose.yml:3 | rabbitmq"
+      ]
+    },
+    {
+      "caller": "product-service",
+      "callee": "ai-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | aks-store-all-in-one.yaml:348 | http://ai-service:5001/",
+        "config | aks-store-ingress-quickstart.yaml:200 | http://ai-service:5001/",
+        "config | aks-store-quickstart.yaml:184 | http://ai-service:5001/",
+        "config | docker-compose.yml:119 | AI_SERVICE_URL=http://ai-service:5001/",
+        "config | kustomize/base/product-service.yaml:24 | http://ai-service:5001/"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "ai-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-admin/docker-compose.yml:120 | - AI_SERVICE_URL=http://ai-service:5001/"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "documentdb",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-admin/docker-compose.yml:88 | - ORDER_DB_URI=mongodb://documentdb:10260/?tls=true&tlsAllowInvalidCertificates=true"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "makeline-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:63 | makeline-service",
+        "config | src/store-admin/docker-compose.yml:78 | \"http://makeline-service:3001/health\",",
+        "config | src/store-admin/nginx.conf:32 | proxy_pass http://makeline-service:3001/order/$id;",
+        "config | src/store-admin/nginx.conf:37 | proxy_pass http://makeline-service:3001/order;",
+        "config | src/store-admin/nginx.conf:42 | proxy_pass http://makeline-service:3001/order/fetch;"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-admin/docker-compose.yml:128 | - ORDER_SERVICE_URL=http://order-service:3000/",
+        "config | src/store-admin/docker-compose.yml:48 | \"http://order-service:3000/health\",",
+        "config | src/store-admin/nginx.conf:49 | proxy_pass http://order-service:3000;"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "product-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:99 | product-service",
+        "config | src/store-admin/docker-compose.yml:114 | \"http://product-service:3002/health\",",
+        "config | src/store-admin/nginx.conf:103 | proxy_pass http://product-service:3002/ai/generate/image;",
+        "config | src/store-admin/nginx.conf:54 | proxy_pass http://product-service:3002/;",
+        "config | src/store-admin/nginx.conf:61 | proxy_pass http://product-service:3002;"
+      ]
+    },
+    {
+      "caller": "store-admin",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-admin/docker-compose.yml:18 | image: rabbitmq:4.3.2-management-alpine",
+        "config | src/store-admin/docker-compose.yml:84 | - ORDER_QUEUE_URI=amqp://rabbitmq:5672"
+      ]
+    },
+    {
+      "caller": "store-front",
+      "callee": "ai-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-front/docker-compose.yml:54 | - AI_SERVICE_URL=http://ai-service:5001/"
+      ]
+    },
+    {
+      "caller": "store-front",
+      "callee": "order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:33 | order-service",
+        "config | src/store-front/docker-compose.yml:27 | test: ['CMD', 'wget', '-O', '/dev/null', '-q', 'http://order-service:3000/health']",
+        "config | src/store-front/nginx.conf:31 | proxy_pass http://order-service:3000;"
+      ]
+    },
+    {
+      "caller": "store-front",
+      "callee": "product-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:99 | product-service",
+        "config | src/store-front/docker-compose.yml:49 | test: ['CMD', 'wget', '-O', '/dev/null', '-q', 'http://product-service:3002/health']",
+        "config | src/store-front/nginx.conf:38 | proxy_pass http://product-service:3002;"
+      ]
+    },
+    {
+      "caller": "store-front",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/store-front/docker-compose.yml:4 | image: rabbitmq:4.3.2-management-alpine"
+      ]
+    },
+    {
+      "caller": "virtual-customer",
+      "callee": "order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | aks-store-all-in-one.yaml:531 | http://order-service:3000/",
+        "config | docker-compose.yml:161 | ORDER_SERVICE_URL=http://order-service:3000/",
+        "config | docker-compose.yml:33 | order-service",
+        "config | kustomize/base/virtual-customer.yaml:22 | http://order-service:3000/",
+        "config | src/makeline-service/docker-compose.yml:34 | order-service"
+      ]
+    },
+    {
+      "caller": "virtual-customer",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/virtual-customer/docker-compose.yml:4 | image: rabbitmq:4.3.2-management-alpine"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "documentdb",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/virtual-worker/docker-compose.yml:72 | - ORDER_DB_URI=mongodb://documentdb:10260/?tls=true&tlsAllowInvalidCertificates=true"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "makeline-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | aks-store-all-in-one.yaml:579 | http://makeline-service:3001",
+        "config | docker-compose.yml:173 | MAKELINE_SERVICE_URL=http://makeline-service:3001",
+        "config | docker-compose.yml:63 | makeline-service",
+        "config | kustomize/base/virtual-worker.yaml:22 | http://makeline-service:3001",
+        "config | src/virtual-worker/docker-compose.yml:63 | test: [\"CMD\", \"wget\", \"-O\", \"/dev/null\", \"-q\", \"http://makeline-service:3001/health\"]"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/virtual-worker/docker-compose.yml:41 | test: [\"CMD\", \"wget\", \"-O\", \"/dev/null\", \"-q\", \"http://order-service:3000/health\"]",
+        "config | src/virtual-worker/docker-compose.yml:89 | - ORDER_SERVICE_URL=http://order-service:3000/"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "rabbitmq",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | src/virtual-worker/docker-compose.yml:18 | image: rabbitmq:4.3.2-management-alpine",
+        "config | src/virtual-worker/docker-compose.yml:68 | - ORDER_QUEUE_URI=amqp://rabbitmq:5672"
+      ]
+    }
+  ]
+}

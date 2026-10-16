@@ -1,0 +1,114 @@
+{
+  "graph": "reddog-code",
+  "repos": {
+    "reddog-code": "fa46c0a24d34d089cbf6ff904a5bb2ae6f49c154"
+  },
+  "services": [
+    {
+      "name": "accounting-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "app",
+      "kind": "service",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "corp-transfer-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "db",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "loyalty-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "make-line-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "mssql-deployment",
+      "kind": "datastore",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "order-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "receipt-generation-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "ui",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "virtual-customers",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "virtual-worker",
+      "kind": "other",
+      "repo": "reddog-code"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "ui",
+      "callee": "accounting-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.UI/vue.config.js:108 | fetch(ACCOUNTING_BASE_URL + \"/Orders/Minute/PT20M?StoreId=\" + STORE_ID)"
+      ]
+    },
+    {
+      "caller": "ui",
+      "callee": "make-line-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.UI/vue.config.js:70 | fetch(MAKELINE_SERVICE)"
+      ]
+    },
+    {
+      "caller": "virtual-customers",
+      "callee": "order-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.VirtualCustomers/VirtualCustomers.cs:15 | private const string OrderServiceDaprId = \"order-service\";"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "make-line-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.VirtualWorker/Controllers/VirtualWorkerController.cs:17 | private const string MakeLineServiceAppId = \"make-line-service\";"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1032 @@
+{
+  "graph": "yas",
+  "repos": {
+    "yas": "179e813568c345bad3fce985088b5535e57481aa"
+  },
+  "services": [
+    {
+      "name": "backoffice",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "backoffice-nextjs",
+      "kind": "other",
+      "repo": "yas"
+    },
+    {
+      "name": "cart",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "customer",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "identity",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "inventory",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "jaeger",
+      "kind": "infra",
+      "repo": "yas"
+    },
+    {
+      "name": "kafka",
+      "kind": "datastore",
+      "repo": "yas"
+    },
+    {
+      "name": "kafka-connect",
+      "kind": "datastore",
+      "repo": "yas"
+    },
+    {
+      "name": "kafka-ui",
+      "kind": "datastore",
+      "repo": "yas"
+    },
+    {
+      "name": "keycloak",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "location",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "media",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "nginx",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "order",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "payment",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "pgadmin",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "postgres",
+      "kind": "datastore",
+      "repo": "yas"
+    },
+    {
+      "name": "product",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "promotion",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "rating",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "redis",
+      "kind": "datastore",
+      "repo": "yas"
+    },
+    {
+      "name": "sampledata",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "storefront",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "storefront-nextjs",
+      "kind": "other",
+      "repo": "yas"
+    },
+    {
+      "name": "swagger-ui",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "tax",
+      "kind": "service",
+      "repo": "yas"
+    },
+    {
+      "name": "zookeeper",
+      "kind": "service",
+      "repo": "yas"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "backoffice",
+      "callee": "backoffice-nextjs",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | backoffice-bff/src/main/resources/application-prod.yaml:18 | uri: http://backoffice-nextjs:3000"
+      ]
+    },
+    {
+      "caller": "backoffice",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | backoffice-bff/src/main/resources/application.yaml:16 | issuer-uri: http://identity/realms/Yas"
+      ]
+    },
+    {
+      "caller": "backoffice",
+      "callee": "jaeger",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | yaslocal.yaml:186 | http://jaeger:4317"
+      ]
+    },
+    {
+      "caller": "backoffice",
+      "callee": "nginx",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | backoffice-bff/src/main/resources/application-prod.yaml:10 | uri: http://nginx"
+      ]
+    },
+    {
+      "caller": "backoffice",
+      "callee": "redis",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | backoffice-bff/src/main/resources/application.yaml:25 | host: redis"
+      ]
+    },
+    {
+      "caller": "cart",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | cart/src/main/resources/application.properties:29 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | cart/src/main/resources/application.properties:30 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token",
+        "config | cart/src/main/resources/application.properties:9 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas"
+      ]
+    },
+    {
+      "caller": "cart",
+      "callee": "postgres",
+      "sources": [
+        "config",
+        "code"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:186 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/cart",
+        "code | cart/src/it/java/com/yas/cart/service/ProductServiceIT.java:27 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    },
+    {
+      "caller": "customer",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | customer/src/it/resources/application.properties:11 | keycloak.auth-server-url=http://identity",
+        "config | customer/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | customer/src/main/resources/application.properties:31 | keycloak.auth-server-url=http://identity",
+        "config | customer/src/main/resources/application.properties:41 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | customer/src/main/resources/application.properties:42 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "customer",
+      "callee": "postgres",
+      "sources": [
+        "config",
+        "code"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:159 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/customer",
+        "code | customer/src/it/java/com/yas/customer/service/LocationServiceIT.java:29 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    },
+    {
+      "caller": "identity",
+      "callee": "backoffice",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | identity/realm-export.json:649 | \"http://backoffice/*\","
+      ]
+    },
+    {
+      "caller": "identity",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:21 | jdbc:postgresql://postgres:5432/keycloak"
+      ]
+    },
+    {
+      "caller": "identity",
+      "callee": "storefront",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | identity/realm-export.json:991 | \"http://storefront/*\","
+      ]
+    },
+    {
+      "caller": "inventory",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | inventory/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | inventory/src/main/resources/application.properties:37 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | inventory/src/main/resources/application.properties:38 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "inventory",
+      "callee": "postgres",
+      "sources": [
+        "config",
+        "code"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:335 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/inventory",
+        "code | inventory/src/it/java/com/yas/inventory/service/LocationServiceIT.java:27 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");",
+        "code | inventory/src/it/java/com/yas/inventory/service/ProductServiceIT.java:28 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    },
+    {
+      "caller": "kafka",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:541 | zookeeper"
+      ]
+    },
+    {
+      "caller": "kafka-connect",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:550 | kafka",
+        "config | docker-compose.yml:576 | BOOTSTRAP_SERVERS=kafka:9092"
+      ]
+    },
+    {
+      "caller": "kafka-ui",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:550 | kafka",
+        "config | docker-compose.yml:576 | kafka:9092"
+      ]
+    },
+    {
+      "caller": "kafka-ui",
+      "callee": "kafka-connect",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:567 | kafka-connect"
+      ]
+    },
+    {
+      "caller": "keycloak",
+      "callee": "backoffice",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/deploy/keycloak/keycloak/values.yaml:2 | backofficeRedirectUrl: http://backoffice.yas.local.com"
+      ]
+    },
+    {
+      "caller": "keycloak",
+      "callee": "storefront",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/deploy/keycloak/keycloak/values.yaml:3 | storefrontRedirectUrl: http://storefront.yas.local.com"
+      ]
+    },
+    {
+      "caller": "location",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | location/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | location/src/main/resources/application.properties:34 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | location/src/main/resources/application.properties:35 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "location",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:308 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/location"
+      ]
+    },
+    {
+      "caller": "media",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | media/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | media/src/main/resources/application.properties:26 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | media/src/main/resources/application.properties:27 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "media",
+      "callee": "jaeger",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | yaslocal.yaml:186 | http://jaeger:4317"
+      ]
+    },
+    {
+      "caller": "media",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:104 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/media",
+        "config | yaslocal.yaml:283 | jdbc:postgresql://postgres:5432/media"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "backoffice",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:64 | proxy_pass http://backoffice;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "cart",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:20 | proxy_pass http://cart;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "customer",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:17 | proxy_pass http://customer;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "identity",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:86 | proxy_pass http://identity;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "inventory",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:32 | proxy_pass http://inventory;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "location",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:29 | proxy_pass http://location;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "media",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:8 | proxy_pass http://media;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "order",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:26 | proxy_pass http://order;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "payment",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:46 | proxy_pass http://payment;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "pgadmin",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:78 | proxy_pass http://pgadmin;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "product",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:14 | proxy_pass http://product;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "promotion",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:38 | proxy_pass http://promotion;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "rating",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:23 | proxy_pass http://rating;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "sampledata",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:53 | proxy_pass http://sampledata;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "storefront",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:71 | proxy_pass http://storefront;"
+      ]
+    },
+    {
+      "caller": "nginx",
+      "callee": "tax",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | nginx/templates/default.conf.template:35 | proxy_pass http://tax;"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | order/src/main/resources/application.properties:12 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | order/src/main/resources/application.properties:42 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | order/src/main/resources/application.properties:43 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "postgres",
+      "sources": [
+        "code"
+      ],
+      "confidence": "medium",
+      "evidence": [
+        "code | order/src/it/java/com/yas/order/service/CustomerServiceIT.java:25 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");",
+        "code | order/src/it/java/com/yas/order/service/ProductServiceIT.java:28 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");",
+        "code | order/src/it/java/com/yas/order/service/TaxServiceIT.java:25 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    },
+    {
+      "caller": "payment",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | payment/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | payment/src/main/resources/application.properties:39 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | payment/src/main/resources/application.properties:40 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "payment",
+      "callee": "postgres",
+      "sources": [
+        "config",
+        "code"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:277 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payment",
+        "code | payment/src/it/java/com/yas/payment/service/OrderServiceIT.java:32 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    },
+    {
+      "caller": "payment",
+      "callee": "storefront",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | payment/src/it/resources/application.properties:11 | yas.public.url=http://storefront/complete-payment",
+        "config | payment/src/main/resources/application.properties:17 | yas.public.url=http://storefront/complete-payment"
+      ]
+    },
+    {
+      "caller": "product",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | product/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | product/src/main/resources/application.properties:37 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | product/src/main/resources/application.properties:38 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "product",
+      "callee": "jaeger",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | yaslocal.yaml:186 | http://jaeger:4317"
+      ]
+    },
+    {
+      "caller": "product",
+      "callee": "media",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | yaslocal.yaml:321 | http://media/media"
+      ]
+    },
+    {
+      "caller": "product",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:132 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/product",
+        "config | yaslocal.yaml:317 | jdbc:postgresql://postgres:5432/product"
+      ]
+    },
+    {
+      "caller": "promotion",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | promotion/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | promotion/src/main/resources/application.properties:37 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | promotion/src/main/resources/application.properties:38 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "promotion",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:364 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/promotion"
+      ]
+    },
+    {
+      "caller": "rating",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | rating/src/main/resources/application.properties:13 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | rating/src/main/resources/application.properties:38 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | rating/src/main/resources/application.properties:39 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "rating",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:214 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/rating"
+      ]
+    },
+    {
+      "caller": "sampledata",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | sampledata/src/main/resources/application.properties:10 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | sampledata/src/main/resources/application.properties:16 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | sampledata/src/main/resources/application.properties:17 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "sampledata",
+      "callee": "media",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | sampledata/src/main/resources/application.properties:20 | spring.datasource.media.url=jdbc:postgresql://localhost:5432/media"
+      ]
+    },
+    {
+      "caller": "sampledata",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:420 | SPRING_DATASOURCE_PRODUCT_URL=jdbc:postgresql://postgres:5432/product",
+        "config | docker-compose.yml:421 | SPRING_DATASOURCE_MEDIA_URL=jdbc:postgresql://postgres:5432/media"
+      ]
+    },
+    {
+      "caller": "sampledata",
+      "callee": "product",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | sampledata/src/main/resources/application.properties:19 | spring.datasource.product.url=jdbc:postgresql://localhost:5432/product"
+      ]
+    },
+    {
+      "caller": "storefront",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | storefront-bff/src/main/resources/application.yaml:16 | issuer-uri: http://identity/realms/Yas",
+        "config | storefront-bff/src/main/resources/application.yaml:55 | token-identity: http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "storefront",
+      "callee": "jaeger",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | yaslocal.yaml:186 | http://jaeger:4317"
+      ]
+    },
+    {
+      "caller": "storefront",
+      "callee": "nginx",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | storefront-bff/src/main/resources/application-prod.yaml:10 | uri: http://nginx"
+      ]
+    },
+    {
+      "caller": "storefront",
+      "callee": "redis",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | storefront-bff/src/main/resources/application.yaml:25 | host: redis"
+      ]
+    },
+    {
+      "caller": "storefront",
+      "callee": "storefront-nextjs",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | storefront-bff/src/main/resources/application-prod.yaml:18 | uri: http://storefront-nextjs:3000"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "cart",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:43 | { url: 'http://api.yas.local.com/cart/v3/api-docs', name: 'Cart'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "customer",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:42 | { url: 'http://api.yas.local.com/customer/v3/api-docs', name: 'Customer' },"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "inventory",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:48 | { url: 'http://api.yas.local.com/inventory/v3/api-docs', name: 'Inventory'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "location",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:47 | { url: 'http://api.yas.local.com/location/v3/api-docs', name: 'Location'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "media",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:41 | { url: 'http://api.yas.local.com/media/v3/api-docs', name: 'Media' },"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "order",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:45 | { url: 'http://api.yas.local.com/order/v3/api-docs', name: 'Order'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "payment",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:46 | { url: 'http://api.yas.local.com/payment/v3/api-docs', name: 'Payment'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "product",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:40 | urls: \"[{ url: 'http://api.yas.local.com/product/v3/api-docs', name: 'Product' },"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "promotion",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:50 | { url: 'http://api.yas.local.com/promotion/v3/api-docs', name: 'Promotion'},"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "rating",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:44 | { url: 'http://api.yas.local.com/rating/v3/api-docs', name: 'Rating' },"
+      ]
+    },
+    {
+      "caller": "swagger-ui",
+      "callee": "tax",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | k8s/charts/swagger-ui/values.yaml:49 | { url: 'http://api.yas.local.com/tax/v3/api-docs', name: 'Tax' },"
+      ]
+    },
+    {
+      "caller": "tax",
+      "callee": "identity",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | tax/src/main/resources/application.properties:16 | spring.security.oauth2.resourceserver.jwt.issuer-uri=http://identity/realms/Yas",
+        "config | tax/src/main/resources/application.properties:37 | springdoc.oauthflow.authorization-url=http://identity/realms/Yas/protocol/openid-connect/auth",
+        "config | tax/src/main/resources/application.properties:38 | springdoc.oauthflow.token-url=http://identity/realms/Yas/protocol/openid-connect/token"
+      ]
+    },
+    {
+      "caller": "tax",
+      "callee": "postgres",
+      "sources": [
+        "config",
+        "code"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:392 | SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/tax",
+        "code | tax/src/it/java/com/yas/tax/service/LocationServiceIT.java:25 | static PostgreSQLContainer<?> postgresContainer = new PostgreSQLContainer<>(\"postgres:16\");"
+      ]
+    }
+  ]
+}

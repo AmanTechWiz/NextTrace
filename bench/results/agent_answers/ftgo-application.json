@@ -1,0 +1,911 @@
+{
+  "graph": "ftgo-application",
+  "repos": {
+    "ftgo-application": "558dfc53b11d30a5f1d995c0c6d58d5106c28189"
+  },
+  "services": [
+    {
+      "name": "cdc-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "dynamodblocal",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "dynamodblocal-init",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-accounting-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-api-gateway",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-cdc-service",
+      "kind": "other",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-consumer-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-delivery-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-dynamodb-local",
+      "kind": "other",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-kafka",
+      "kind": "datastore",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-kitchen-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-mysql",
+      "kind": "datastore",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-order-history-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-order-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-restaurant-service",
+      "kind": "service",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "ftgo-zookeeper",
+      "kind": "other",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "kafka",
+      "kind": "datastore",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "kafka-gui",
+      "kind": "datastore",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "mysql",
+      "kind": "datastore",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "zipkin",
+      "kind": "infra",
+      "repo": "ftgo-application"
+    },
+    {
+      "name": "zookeeper",
+      "kind": "other",
+      "repo": "ftgo-application"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "cdc-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "cdc-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:25 | mysql",
+        "config | docker-compose.yml:80 | jdbc:mysql://mysql:3306/eventuate"
+      ]
+    },
+    {
+      "caller": "cdc-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "dynamodblocal-init",
+      "callee": "dynamodblocal",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:229 | dynamodblocal",
+        "config | docker-compose.yml:236 | http://dynamodblocal:8000"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:54 | ftgo-kafka:9092",
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:54 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:40 | jdbc:mysql://ftgo-mysql/eventuate",
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:40 | value: jdbc:mysql://ftgo-mysql/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:56 | ftgo-zookeeper:2181",
+        "config | ftgo-accounting-service/src/deployment/kubernetes/ftgo-accounting-service.yml:56 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:188 | jdbc:mysql://mysql/ftgo_accounting_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-accounting-service/src/main/resources/application.properties:11 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_accounting_service"
+      ]
+    },
+    {
+      "caller": "ftgo-accounting-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181",
+        "config | docker-compose.yml:3 | zookeeper"
+      ]
+    },
+    {
+      "caller": "ftgo-api-gateway",
+      "callee": "ftgo-consumer-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:248 | http://ftgo-consumer-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:51 | http://ftgo-consumer-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:51 | value: http://ftgo-consumer-service:8080"
+      ]
+    },
+    {
+      "caller": "ftgo-api-gateway",
+      "callee": "ftgo-order-history-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:247 | http://ftgo-order-history-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:49 | http://ftgo-order-history-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:49 | value: http://ftgo-order-history-service:8080"
+      ]
+    },
+    {
+      "caller": "ftgo-api-gateway",
+      "callee": "ftgo-order-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:246 | http://ftgo-order-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:47 | http://ftgo-order-service:8080",
+        "config | ftgo-api-gateway/src/deployment/kubernetes/ftgo-api-gateway.yml:47 | value: http://ftgo-order-service:8080"
+      ]
+    },
+    {
+      "caller": "ftgo-api-gateway",
+      "callee": "zipkin",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:133 | http://zipkin:9411/"
+      ]
+    },
+    {
+      "caller": "ftgo-cdc-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:40 | ftgo-kafka:29092",
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:40 | value: ftgo-kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-cdc-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:88 | jdbc:mysql://ftgo-mysql:3306/eventuate",
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:88 | value: jdbc:mysql://ftgo-mysql:3306/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-cdc-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:42 | ftgo-zookeeper:2181",
+        "config | deployment/kubernetes/cdc-service/ftgo-cdc-service.yml:42 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:48 | ftgo-kafka:9092",
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:48 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:40 | jdbc:mysql://ftgo-mysql/ftgo_consumer_service",
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:40 | value: jdbc:mysql://ftgo-mysql/ftgo_consumer_service"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:50 | ftgo-zookeeper:2181",
+        "config | ftgo-consumer-service/src/deployment/kubernetes/ftgo-consumer-service.yml:50 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:105 | jdbc:mysql://mysql/ftgo_consumer_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-consumer-service/src/main/resources/application.properties:11 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_consumer_service"
+      ]
+    },
+    {
+      "caller": "ftgo-consumer-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-delivery-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-delivery-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-delivery-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:208 | jdbc:mysql://mysql/ftgo_delivery_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-delivery-service/src/main/resources/application.properties:17 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_delivery_service"
+      ]
+    },
+    {
+      "caller": "ftgo-delivery-service",
+      "callee": "zipkin",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:123 | zipkin",
+        "config | docker-compose.yml:133 | http://zipkin:9411/"
+      ]
+    },
+    {
+      "caller": "ftgo-delivery-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-kafka",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | deployment/kubernetes/stateful-services/ftgo-kafka-deployment.yml:34 | ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:54 | ftgo-kafka:9092",
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:54 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:40 | jdbc:mysql://ftgo-mysql/eventuate",
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:40 | value: jdbc:mysql://ftgo-mysql/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:56 | ftgo-zookeeper:2181",
+        "config | ftgo-kitchen-service/src/deployment/kubernetes/ftgo-kitchen-service.yml:56 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:148 | jdbc:mysql://mysql/ftgo_kitchen_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-kitchen-service/src/main/resources/application.properties:12 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_kitchen_service"
+      ]
+    },
+    {
+      "caller": "ftgo-kitchen-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181",
+        "config | docker-compose.yml:3 | zookeeper"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "dynamodblocal",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:229 | dynamodblocal",
+        "config | docker-compose.yml:236 | http://dynamodblocal:8000"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "dynamodblocal-init",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:230 | dynamodblocal-init"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "ftgo-dynamodb-local",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:58 | http://ftgo-dynamodb-local:8000",
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:58 | value: http://ftgo-dynamodb-local:8000"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:54 | ftgo-kafka:9092",
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:54 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:40 | jdbc:mysql://ftgo-mysql/eventuate",
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:40 | value: jdbc:mysql://ftgo-mysql/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:56 | ftgo-zookeeper:2181",
+        "config | ftgo-order-history-service/src/deployment/kubernetes/ftgo-order-history-service.yml:56 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-order-history-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181",
+        "config | docker-compose.yml:3 | zookeeper"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-accounting-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagaparticipants/AccountingServiceProxy.java:13 | .withChannel(AccountingServiceChannels.accountingServiceChannel)"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-consumer-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagaparticipants/ConsumerServiceProxy.java:14 | .withChannel(ConsumerServiceChannels.consumerServiceChannel)"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:62 | ftgo-kafka:9092",
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:62 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-kitchen-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | ftgo-order-service/src/main/java/net/chrisrichardson/ftgo/orderservice/sagaparticipants/KitchenServiceProxy.java:12 | .withChannel(KitchenServiceChannels.COMMAND_CHANNEL)"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:48 | jdbc:mysql://ftgo-mysql/eventuate",
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:48 | value: jdbc:mysql://ftgo-mysql/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:64 | ftgo-zookeeper:2181",
+        "config | ftgo-order-service/src/deployment/kubernetes/ftgo-order-service.yml:64 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:125 | jdbc:mysql://mysql/ftgo_order_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-order-service/src/main/resources/application.properties:17 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_order_service"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "zipkin",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:123 | zipkin",
+        "config | docker-compose.yml:133 | http://zipkin:9411/"
+      ]
+    },
+    {
+      "caller": "ftgo-order-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "cdc-service",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:37 | cdc-service"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "ftgo-kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:55 | ftgo-kafka:9092",
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:55 | value: ftgo-kafka:9092"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "ftgo-mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:41 | jdbc:mysql://ftgo-mysql/eventuate",
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:41 | value: jdbc:mysql://ftgo-mysql/eventuate"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "ftgo-zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:57 | ftgo-zookeeper:2181",
+        "config | ftgo-restaurant-service/src/deployment/kubernetes/ftgo-restaurant-service.yml:57 | value: ftgo-zookeeper:2181"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "mysql",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:168 | jdbc:mysql://mysql/ftgo_restaurant_service",
+        "config | docker-compose.yml:25 | mysql",
+        "config | ftgo-restaurant-service/src/main/resources/application.properties:12 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/ftgo_restaurant_service"
+      ]
+    },
+    {
+      "caller": "ftgo-restaurant-service",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181",
+        "config | docker-compose.yml:3 | zookeeper"
+      ]
+    },
+    {
+      "caller": "kafka",
+      "callee": "zookeeper",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:22 | zookeeper:2181",
+        "config | docker-compose.yml:3 | zookeeper"
+      ]
+    },
+    {
+      "caller": "kafka-gui",
+      "callee": "kafka",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose.yml:11 | kafka",
+        "config | docker-compose.yml:18 | kafka:29092"
+      ]
+    }
+  ]
+}
