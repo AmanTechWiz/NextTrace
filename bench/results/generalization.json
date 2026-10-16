@@ -1,0 +1,577 @@
+[
+  {
+    "repo": "aks-store-demo",
+    "url": "https://github.com/Azure-Samples/aks-store-demo",
+    "doc": "README 'Architecture' + assets/demo-arch-with-openai.png",
+    "commit": "3c3ba3bd999d0b2d78eece1adac84b712b7d9c4f",
+    "services_named_in_docs": 6,
+    "services_found": 6,
+    "services_missing": [],
+    "sync": [
+      5,
+      5
+    ],
+    "async": [
+      1,
+      1
+    ],
+    "store": [
+      1,
+      1
+    ],
+    "missed": [],
+    "not_in_docs": [
+      [
+        "makeline-service",
+        "order-service"
+      ],
+      [
+        "product-service",
+        "ai-service"
+      ],
+      [
+        "store-admin",
+        "order-service"
+      ],
+      [
+        "store-front",
+        "ai-service"
+      ],
+      [
+        "virtual-customer",
+        "order-service"
+      ],
+      [
+        "virtual-worker",
+        "makeline-service"
+      ],
+      [
+        "virtual-worker",
+        "order-service"
+      ]
+    ]
+  },
+  {
+    "repo": "go-coffeeshop",
+    "url": "https://github.com/thangchung/go-coffeeshop",
+    "doc": "docs/coffeeshop.svg (gRPC-gateway is the compose service `proxy`)",
+    "commit": "22d33190a0cf81630878e47bafae2de7c0abb783",
+    "services_named_in_docs": 6,
+    "services_found": 6,
+    "services_missing": [],
+    "sync": [
+      4,
+      4
+    ],
+    "async": [
+      2,
+      2
+    ],
+    "store": [
+      3,
+      3
+    ],
+    "missed": [],
+    "not_in_docs": []
+  },
+  {
+    "repo": "acme_fitness_demo",
+    "url": "https://github.com/vmwarecloudadvocacy/acme_fitness_demo",
+    "doc": "acmeshop.png",
+    "commit": "594c3926e7ac417ca5b69125d2df31410043408a",
+    "services_named_in_docs": 6,
+    "services_found": 6,
+    "services_missing": [],
+    "sync": [
+      0,
+      7
+    ],
+    "async": [
+      0,
+      0
+    ],
+    "store": [
+      3,
+      4
+    ],
+    "missed": [
+      [
+        "front-end",
+        "user"
+      ],
+      [
+        "front-end",
+        "catalog"
+      ],
+      [
+        "front-end",
+        "cart"
+      ],
+      [
+        "front-end",
+        "order"
+      ],
+      [
+        "catalog",
+        "cart"
+      ],
+      [
+        "cart",
+        "order"
+      ],
+      [
+        "order",
+        "payment"
+      ],
+      [
+        "user",
+        "store"
+      ]
+    ],
+    "not_in_docs": []
+  },
+  {
+    "repo": "reddog-code",
+    "url": "https://github.com/Azure/reddog-code",
+    "doc": "README 'Architecture Diagram and Service Descriptions' + assets/reddog_code.png",
+    "commit": "fa46c0a24d34d089cbf6ff904a5bb2ae6f49c154",
+    "services_named_in_docs": 8,
+    "services_found": 8,
+    "services_missing": [],
+    "sync": [
+      0,
+      3
+    ],
+    "async": [
+      0,
+      4
+    ],
+    "store": [
+      0,
+      3
+    ],
+    "missed": [
+      [
+        "ui",
+        "order-service"
+      ],
+      [
+        "virtual-customers",
+        "order-service"
+      ],
+      [
+        "virtual-worker",
+        "make-line-service"
+      ],
+      [
+        "order-service",
+        "make-line-service",
+        "async"
+      ],
+      [
+        "order-service",
+        "loyalty-service",
+        "async"
+      ],
+      [
+        "order-service",
+        "receipt-generation-service",
+        "async"
+      ],
+      [
+        "order-service",
+        "accounting-service",
+        "async"
+      ],
+      [
+        "make-line-service",
+        "store"
+      ],
+      [
+        "loyalty-service",
+        "store"
+      ],
+      [
+        "accounting-service",
+        "store"
+      ]
+    ],
+    "not_in_docs": []
+  },
+  {
+    "repo": "microservice-kubernetes",
+    "url": "https://github.com/ewolff/microservice-kubernetes",
+    "doc": "README: order 'uses catalog and customer'; Apache 'forwards HTTP requests to the microservices'",
+    "commit": "db3af1b3c933c48871fab74d45b466f2dfedb6a3",
+    "services_named_in_docs": 4,
+    "services_found": 4,
+    "services_missing": [],
+    "sync": [
+      3,
+      5
+    ],
+    "async": [
+      0,
+      0
+    ],
+    "store": [
+      0,
+      0
+    ],
+    "missed": [
+      [
+        "order",
+        "catalog"
+      ],
+      [
+        "order",
+        "customer"
+      ]
+    ],
+    "not_in_docs": []
+  },
+  {
+    "repo": "ftgo-application",
+    "url": "https://github.com/microservices-patterns/ftgo-application",
+    "doc": "README.adoc ch.3-4: services talk over Kafka; CreateOrderSaga commands consumer, kitchen, accounting",
+    "commit": "558dfc53b11d30a5f1d995c0c6d58d5106c28189",
+    "services_named_in_docs": 4,
+    "services_found": 4,
+    "services_missing": [],
+    "sync": [
+      0,
+      0
+    ],
+    "async": [
+      3,
+      3
+    ],
+    "store": [
+      0,
+      0
+    ],
+    "missed": [],
+    "not_in_docs": [
+      [
+        "dynamodblocal-init",
+        "dynamodblocal"
+      ],
+      [
+        "ftgo-accounting-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-api-gateway",
+        "ftgo-consumer-service"
+      ],
+      [
+        "ftgo-api-gateway",
+        "ftgo-order-history-service"
+      ],
+      [
+        "ftgo-api-gateway",
+        "ftgo-order-service"
+      ],
+      [
+        "ftgo-consumer-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-delivery-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-kitchen-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-order-history-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-order-history-service",
+        "dynamodblocal"
+      ],
+      [
+        "ftgo-order-history-service",
+        "dynamodblocal-init"
+      ],
+      [
+        "ftgo-order-service",
+        "cdc-service"
+      ],
+      [
+        "ftgo-restaurant-service",
+        "cdc-service"
+      ]
+    ]
+  },
+  {
+    "repo": "yas",
+    "url": "https://github.com/nashtech-garage/yas",
+    "doc": "yas-architecture-local.png (Storefront.BFF = `storefront`, Backoffice.BFF = `backoffice`)",
+    "commit": "179e813568c345bad3fce985088b5535e57481aa",
+    "services_named_in_docs": 16,
+    "services_found": 15,
+    "services_missing": [
+      "search"
+    ],
+    "sync": [
+      2,
+      15
+    ],
+    "async": [
+      0,
+      0
+    ],
+    "store": [
+      9,
+      9
+    ],
+    "missed": [
+      [
+        "nginx",
+        "identity"
+      ],
+      [
+        "nginx",
+        "storefront"
+      ],
+      [
+        "nginx",
+        "backoffice"
+      ],
+      [
+        "nginx",
+        "media"
+      ],
+      [
+        "nginx",
+        "product"
+      ],
+      [
+        "nginx",
+        "cart"
+      ],
+      [
+        "nginx",
+        "order"
+      ],
+      [
+        "nginx",
+        "rating"
+      ],
+      [
+        "nginx",
+        "customer"
+      ],
+      [
+        "nginx",
+        "location"
+      ],
+      [
+        "nginx",
+        "inventory"
+      ],
+      [
+        "nginx",
+        "tax"
+      ],
+      [
+        "nginx",
+        "search"
+      ]
+    ],
+    "not_in_docs": [
+      [
+        "backoffice",
+        "identity"
+      ],
+      [
+        "backoffice",
+        "nginx"
+      ],
+      [
+        "cart",
+        "identity"
+      ],
+      [
+        "customer",
+        "identity"
+      ],
+      [
+        "identity",
+        "backoffice"
+      ],
+      [
+        "identity",
+        "storefront"
+      ],
+      [
+        "inventory",
+        "identity"
+      ],
+      [
+        "keycloak",
+        "backoffice"
+      ],
+      [
+        "keycloak",
+        "storefront"
+      ],
+      [
+        "location",
+        "identity"
+      ],
+      [
+        "media",
+        "identity"
+      ],
+      [
+        "order",
+        "identity"
+      ],
+      [
+        "payment",
+        "identity"
+      ],
+      [
+        "payment",
+        "storefront"
+      ],
+      [
+        "product",
+        "identity"
+      ],
+      [
+        "product",
+        "media"
+      ],
+      [
+        "promotion",
+        "identity"
+      ],
+      [
+        "rating",
+        "identity"
+      ],
+      [
+        "sampledata",
+        "identity"
+      ],
+      [
+        "sampledata",
+        "media"
+      ],
+      [
+        "sampledata",
+        "product"
+      ],
+      [
+        "storefront",
+        "identity"
+      ],
+      [
+        "storefront",
+        "nginx"
+      ],
+      [
+        "swagger-ui",
+        "cart"
+      ],
+      [
+        "swagger-ui",
+        "customer"
+      ],
+      [
+        "swagger-ui",
+        "inventory"
+      ],
+      [
+        "swagger-ui",
+        "location"
+      ],
+      [
+        "swagger-ui",
+        "media"
+      ],
+      [
+        "swagger-ui",
+        "order"
+      ],
+      [
+        "swagger-ui",
+        "payment"
+      ],
+      [
+        "swagger-ui",
+        "product"
+      ],
+      [
+        "swagger-ui",
+        "promotion"
+      ],
+      [
+        "swagger-ui",
+        "rating"
+      ],
+      [
+        "swagger-ui",
+        "tax"
+      ],
+      [
+        "tax",
+        "identity"
+      ]
+    ]
+  },
+  {
+    "repo": "eventuate-tram-sagas-examples-customers-and-orders",
+    "url": "https://github.com/eventuate-tram/eventuate-tram-sagas-examples-customers-and-orders",
+    "doc": "images/Eventuate_Tram_Customer_and_Order_Orchestration_Architecture.png",
+    "commit": "7f0ab8445fea5720d21fa3500d28e7e05d12cb7f",
+    "services_named_in_docs": 3,
+    "services_found": 0,
+    "services_missing": [
+      "api-gateway-service",
+      "customer-service",
+      "order-service"
+    ],
+    "sync": [
+      0,
+      2
+    ],
+    "async": [
+      0,
+      1
+    ],
+    "store": [
+      0,
+      2
+    ],
+    "missed": [
+      [
+        "api-gateway-service",
+        "customer-service"
+      ],
+      [
+        "api-gateway-service",
+        "order-service"
+      ],
+      [
+        "order-service",
+        "customer-service",
+        "async"
+      ],
+      [
+        "customer-service",
+        "store"
+      ],
+      [
+        "order-service",
+        "store"
+      ]
+    ],
+    "not_in_docs": []
+  }
+]
