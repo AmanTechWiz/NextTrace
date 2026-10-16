@@ -7,6 +7,8 @@
     "services_named_in_docs": 6,
     "services_found": 6,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       5,
       5
@@ -59,6 +61,8 @@
     "services_named_in_docs": 6,
     "services_found": 6,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       4,
       4
@@ -82,6 +86,8 @@
     "services_named_in_docs": 6,
     "services_found": 6,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       0,
       7
@@ -138,6 +144,8 @@
     "services_named_in_docs": 8,
     "services_found": 8,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       0,
       3
@@ -206,6 +214,8 @@
     "services_named_in_docs": 4,
     "services_found": 4,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       3,
       5
@@ -238,6 +248,8 @@
     "services_named_in_docs": 4,
     "services_found": 4,
     "services_missing": [],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       0,
       0
@@ -316,6 +328,8 @@
     "services_missing": [
       "search"
     ],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       2,
       15
@@ -537,6 +551,8 @@
       "customer-service",
       "order-service"
     ],
+    "ai_added": 0,
+    "ai_added_in_docs": 0,
     "sync": [
       0,
       2

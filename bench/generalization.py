@@ -5,7 +5,9 @@ Protocol (so the score means something):
   2. The answer key below was written from each repo's README / architecture diagram only, before running the mapper.
   3. Score once. No mapper change is made to improve these numbers; a later fix needs a fresh set of repos.
 
-  uv run python -m bench.generalization        # clones nothing; expects repos in data/eval/<name>
+  uv run python -m bench.generalization                # parser alone, repos in data/eval/<name>
+  uv run python -m bench.generalization --from-graph   # what's in FalkorDB graph <name> after an agent filled gaps
+                                                       # (agent-sandbox/, /MapRepo all); writes *_agent.* outputs
 
 Edges:
   sync:  A calls B directly (HTTP/gRPC).
@@ -93,25 +95,40 @@ KEY = {
 }
 
 
-def score(name, key):
-    m = mapper.scan(ROOT / "data" / "eval" / name)
-    edges = set(m.edges)
-    kinds = {n: s["kind"] for n, s in m.services.items()}
+def from_graph(name):
+    """Edges and kinds as stored in FalkorDB graph `name` (parser + agent-added), stale ones excluded."""
+    from falkordb import FalkorDB
+    g = FalkorDB().select_graph(name)
+    kinds = dict(g.ro_query("MATCH (s:Service) WHERE NOT coalesce(s.stale, false) RETURN s.name, s.kind").result_set)
+    rows = g.ro_query("MATCH (a:Service)-[c:CALLS]->(b:Service) WHERE NOT coalesce(c.stale, false) "
+                      "RETURN a.name, b.name, c.sources").result_set
+    return {(a, b) for a, b, _ in rows}, kinds, {(a, b) for a, b, src in rows if src == ["ai"]}
+
+
+def score(name, key, graph=False):
+    if graph:
+        edges, kinds, ai = from_graph(name)
+        commit = "graph"
+    else:
+        m = mapper.scan(ROOT / "data" / "eval" / name)
+        edges, kinds, ai, commit = set(m.edges), {n: s["kind"] for n, s in m.services.items()}, set(), m.commit
     nbrs = {}
     for a, b in edges:
         nbrs.setdefault(a, set()).add(b)
     brokers = {n for n, k in kinds.items() if k != "service" and BROKER.search(n)}
     stores = {n for n, k in kinds.items() if k == "datastore"}
     named = {a for a, _ in key["sync"] + key["async"]} | {b for _, b in key["sync"] + key["async"]} | set(key["store"])
+    services = set(kinds)
     sync_hit = [e for e in key["sync"] if e in edges]
     async_hit = [e for e in key["async"] if nbrs.get(e[0], set()) & brokers and nbrs.get(e[1], set()) & brokers]
     store_hit = [s for s in key["store"] if nbrs.get(s, set()) & stores]
     apps = {n for n, k in kinds.items() if k == "service"}
     extra = sorted(e for e in edges if e[0] in apps and e[1] in apps and e not in key["sync"])
     return {
-        "repo": name, "url": key["url"], "doc": key["doc"], "commit": m.commit,
-        "services_named_in_docs": len(named), "services_found": len(named & set(m.services)),
-        "services_missing": sorted(named - set(m.services)),
+        "repo": name, "url": key["url"], "doc": key["doc"], "commit": commit,
+        "services_named_in_docs": len(named), "services_found": len(named & services),
+        "services_missing": sorted(named - services),
+        "ai_added": len(ai), "ai_added_in_docs": sum(1 for e in ai if e in key["sync"]),
         "sync": [len(sync_hit), len(key["sync"])], "async": [len(async_hit), len(key["async"])],
         "store": [len(store_hit), len(key["store"])],
         "missed": [list(e) for e in key["sync"] if e not in sync_hit] + [list(e) + ["async"] for e in key["async"] if e not in async_hit]
@@ -157,14 +174,20 @@ def render(rows):
 
 
 def main():
-    rows = [score(n, k) for n, k in KEY.items()]
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--from-graph", action="store_true", help="score the FalkorDB graphs instead of a fresh parser run")
+    graph = ap.parse_args().from_graph
+    rows = [score(n, k, graph) for n, k in KEY.items()]
     out = ROOT / "bench" / "results"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "generalization.json").write_text(json.dumps(rows, indent=2) + "\n")
-    (ROOT / "docs" / "generalization.md").write_text(render(rows))
+    suffix = "_agent" if graph else ""
+    (out / f"generalization{suffix}.json").write_text(json.dumps(rows, indent=2) + "\n")
+    (ROOT / "docs" / f"generalization{suffix}.md").write_text(render(rows))
     for r in rows:
         print(f"{r['repo']:52s} services {r['services_found']}/{r['services_named_in_docs']} | sync {frac(r['sync'])} | "
-              f"async {frac(r['async'])} | store {frac(r['store'])} | not-in-docs {len(r['not_in_docs'])}")
+              f"async {frac(r['async'])} | store {frac(r['store'])} | not-in-docs {len(r['not_in_docs'])}"
+              + (f" | ai added {r['ai_added']} ({r['ai_added_in_docs']} in docs)" if graph else ""))
 
 
 if __name__ == "__main__":
