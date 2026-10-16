@@ -23,7 +23,7 @@
         "comparable": 55,
         "missed": [],
         "undeclared": [],
-        "scanned": 160,
+        "scanned": 162,
         "checkable": 61,
         "seen_in_traffic": 55,
         "unseen": [
@@ -65,8 +65,8 @@
           }
         ],
         "not_checkable": {
+          "caller has no spans in these traces": 70,
           "callee is a datastore or infra (not traced)": 30,
-          "caller has no spans in these traces": 68,
           "callee has no spans in these traces": 1
         }
       },
@@ -75,8 +75,8 @@
         "found": 63,
         "missed": [],
         "routes_parsed": 255,
-        "calls_mapped": 171,
-        "calls_linked": 169,
+        "calls_mapped": 173,
+        "calls_linked": 171,
         "unmatched": [
           {
             "caller": "ts-rebook-service",
@@ -120,15 +120,15 @@
         "unseen": [],
         "not_checkable": {
           "callee has no spans in these traces": 6,
-          "callee is a datastore or infra (not traced)": 1,
-          "caller has no spans in these traces": 1
+          "caller has no spans in these traces": 1,
+          "callee is a datastore or infra (not traced)": 1
         }
       },
       "endpoints": {
         "observed": 11,
         "found": 11,
         "missed": [],
-        "routes_parsed": 16,
+        "routes_parsed": 17,
         "calls_mapped": 20,
         "calls_linked": 20,
         "unmatched": []
