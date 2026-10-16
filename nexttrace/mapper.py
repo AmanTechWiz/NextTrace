@@ -341,7 +341,7 @@ UPSERT_SERVICES = """
 UNWIND $rows AS r
 MERGE (s:Service {name: r.name})
 SET s.kind = r.kind, s.source_dir = r.source_dir, s.declared_in = r.declared_in, s.owner = r.owner,
-    s.repo = $repo, s.last_run = $run, s.commit = $commit, s.stale = false
+    s.repo = $repo, s.last_run = $run, s.commit = $commit, s.stale = false, s.origin = 'scanner'
 """
 
 UPSERT_CALLS = """
@@ -363,7 +363,31 @@ RETURN run
 """
 
 
+def apply_aliases(graph, m: ServiceMap) -> int:
+    """Rename services an agent merged into their real name (merge_services), so a re-map doesn't split them again."""
+    try:
+        pairs = graph.ro_query("MATCH (s:Service) WHERE s.aliases IS NOT NULL UNWIND s.aliases AS a RETURN a, s.name").result_set
+    except Exception:  # graph doesn't exist yet
+        return 0
+    real = {a: r for a, r in pairs if a != r}
+    for alias in [a for a in m.services if a in real]:
+        info, target = m.services.pop(alias), real[alias]
+        keep = m.services.setdefault(target, info)
+        for k in ("source_dir", "owner", "declared_in"):
+            keep[k] = keep[k] or info[k]
+    if real:
+        edges = defaultdict(set)
+        for (a, b), evs in m.edges.items():
+            a, b = real.get(a, a), real.get(b, b)
+            if a != b:
+                edges[(a, b)] |= evs
+        m.edges = edges
+        m.known = {real.get(k, k) for k in m.known}
+    return len(real)
+
+
 def write(graph, m: ServiceMap) -> dict:
+    apply_aliases(graph, m)
     rows = edge_rows(m)
     p = {"repo": m.repo, "commit": m.commit}
     run = graph.query(RECORD_RUN, {**p, "root": m.root, "services": len(m.services), "calls": len(rows)}).result_set[0][0]
@@ -374,6 +398,7 @@ def write(graph, m: ServiceMap) -> dict:
                                                for n, s in sorted(m.services.items())]})
     graph.query(UPSERT_CALLS, {**p, "rows": rows})
     kept = recheck_inferred(graph, m.repo, Path(m.root), run) if m.root else 0
+    kept += recheck_inferred_services(graph, m.repo, Path(m.root), run) if m.root else 0
     return {"inferred_kept": kept, "run": run, "repo": m.repo, "commit": m.commit, "services": len(m.services), "calls": len(rows),
             "stale_services": graph.query(MARK_STALE_SERVICES, p).result_set[0][0],
             "stale_calls": graph.query(MARK_STALE_CALLS, p).result_set[0][0],
@@ -434,6 +459,78 @@ def recheck_inferred(graph, repo, root: Path, run) -> int:
             continue
         graph.query("MATCH (:Service {name: $a})-[c:CALLS]->(:Service {name: $b}) SET c.last_run = $run, c.stale = false",
                     {"a": a, "b": b, "run": run})
+        kept += 1
+    return kept
+
+
+# ---------- services an AI agent added or merged (each with a verified quote) ----------
+
+BUILD_MARKERS = {"Dockerfile", "package.json", "pom.xml", "build.gradle", "build.gradle.kts", "go.mod", "Cargo.toml",
+                 "requirements.txt", "pyproject.toml", "setup.py", "Gemfile", "composer.json", "mix.exs"}
+SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
+
+
+def names_in(quote: str, name: str) -> bool:
+    """`name` appears in the quote as a whole name, not as part of a longer one: order-service is not in order-service-main."""
+    return bool(re.search(rf"(?<![A-Za-z0-9_-]){re.escape(name)}(?![A-Za-z0-9_-])", quote, re.I))
+
+
+def deployable(folder: Path) -> bool:
+    return folder.is_dir() and any((folder / f).exists() for f in BUILD_MARKERS) or any(folder.glob("*.csproj"))
+
+
+def unmapped_folders(root: Path, mapped: list, depth: int = 5) -> list:
+    """Deployable folders (a build file inside) that no mapped service covers: the checklist for missed services.
+    A folder counts as covered when it is a service's folder, inside one, or contains one."""
+    root, mapped = root.resolve(), [(root / d).resolve() for d in mapped if d]
+    out = []
+    for p in sorted(root.rglob("*")):
+        rel = p.relative_to(root).parts
+        if p == root or len(rel) > depth or not p.is_dir() or _skipped(rel) or not deployable(p):
+            continue
+        if any(p == d or d in p.parents or p in d.parents for d in mapped):
+            continue
+        if any(o in p.parents for o in out):  # report the outermost folder only
+            continue
+        out.append(p)
+    return [str(p.relative_to(root)) for p in out]
+
+
+def _norm_name(n: str) -> str:
+    n = re.sub(r"[^a-z0-9]", "", n.lower())
+    for suffix in ("main", "service", "svc", "app", "api", "server"):
+        if n.endswith(suffix) and len(n) > len(suffix) + 2:
+            n = n[: -len(suffix)]
+    return n.rstrip("s")
+
+
+def possible_duplicates(services: list) -> list:
+    """Pairs that look like one service under two names: same or nested folder, or the same name once
+    punctuation and suffixes like -main/-service are dropped (front-end / frontend, order-service / order-service-main)."""
+    out = []
+    for i, (a, da) in enumerate(services):
+        for b, db in services[i + 1:]:
+            pa, pb = Path(da) if da else None, Path(db) if db else None
+            nested = pa and pb and (pa == pb or pa in pb.parents or pb in pa.parents)
+            if nested or _norm_name(a) == _norm_name(b):
+                out.append({"names": [a, b], "why": "same folder" if nested else "similar names"})
+    return out
+
+
+INFERRED_SERVICES = "MATCH (s:Service {repo: $repo, origin: 'ai'}) RETURN s.name, s.evidence"
+
+
+def recheck_inferred_services(graph, repo, root: Path, run) -> int:
+    """Keep agent-added services whose quoted line still exists; the rest go stale."""
+    kept = 0
+    for name, evidence in graph.ro_query(INFERRED_SERVICES, {"repo": repo}).result_set:
+        _, where, quote = evidence[0].split(" | ", 2)
+        file, line = where.rsplit(":", 1)
+        try:
+            verify_quote(root, file, int(line), quote, name, slack=10_000)
+        except ValueError:
+            continue
+        graph.query("MATCH (s:Service {name: $n}) SET s.last_run = $run, s.stale = false", {"n": name, "run": run})
         kept += 1
     return kept
 

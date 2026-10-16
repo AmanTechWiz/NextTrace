@@ -49,7 +49,8 @@ def test_tools_are_listed_with_read_only_hints():
     tools = session(lambda s: s.list_tools()).tools
     hints = {t.name: bool(t.annotations and t.annotations.read_only_hint) for t in tools}
     assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True,
-                     "find_gaps": True, "add_connection": False, "export_map": False}
+                     "find_gaps": True, "add_connection": False, "export_map": False,
+                     "add_service": False, "merge_services": False}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -220,3 +221,123 @@ def test_export_map_writes_the_graph_as_stored(tmp_path, clean):
     assert data["calls"] == [{"caller": "orders", "callee": "pay", "sources": ["ai"], "confidence": "inferred",
                               "evidence": ['ai | orders/Client.java:3 | lb.call(Service.PAY, "/charge")']}]
     assert {s["name"] for s in data["services"]} == {"gateway", "orders", "pay"} and "shop" in data["repos"]
+
+
+# One app the scanner can't see (no compose/k8s entry), a duplicate name, and a folder-named service.
+MESSY_REPO = {
+    "docker-compose.yml": ("services:\n  front-end: {build: ./web}\n  cart: {build: ./cart}\n"
+                           "  order-service-main: {build: ./orders/order-service-main}\n"),
+    "k8s/frontend.yaml": ("apiVersion: apps/v1\nkind: Deployment\nmetadata: {name: frontend}\nspec:\n  template:\n"
+                          "    spec:\n      containers:\n      - name: app\n        image: web:1\n        env:\n"
+                          "        - name: CART_ADDR\n          value: \"cart:80\"\n"),
+    "web/package.json": '{"name": "frontend"}\n',
+    "web/app.js": 'fetch("http://cart:80/items")\n',
+    "cart/main.go": "",
+    "cart/go.mod": "module cart\n",
+    "cart/NOTES.txt": "cart-v2 is the rewrite of cart\n",
+    "orders/order-service-main/build.gradle": "",
+    "orders/order-service-main/src/main/resources/application.yml": "spring:\n  application:\n    name: order-service\n",
+    "admin-ui/package.json": '{"name": "admin-ui"}\n',     # missed by the scanner: no deploy entry
+    "admin-ui/src/api.js": 'export const CART = "http://cart:80";\n',
+    "libs/common/pom.xml": "<project/>",                     # a shared library: deployable-looking, not a service
+    "components/pubsub.yaml": "apiVersion: dapr.io/v1alpha1\nkind: Component\nmetadata:\n  name: orders-pubsub\n",
+}
+
+
+def test_find_gaps_lists_unmapped_folders_and_duplicates(tmp_path, clean):
+    repo = make(tmp_path / "shop", MESSY_REPO)
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        return await s.call_tool("find_gaps", {"graph": GRAPH})
+
+    g = session(steps).structured_content
+    assert sorted(Path(f).name for f in g["unmapped_folders"]) == ["admin-ui", "common"]
+    assert {tuple(sorted(d["names"])) for d in g["possible_duplicates"]} == {("front-end", "frontend")}
+
+
+def test_add_service_needs_proof_and_a_real_code_folder(tmp_path, clean):
+    repo = make(tmp_path / "shop", MESSY_REPO)
+    ok_args = {"graph": GRAPH, "name": "admin-ui", "kind": "service", "file": "admin-ui/package.json", "line": 1,
+               "quote": '"name": "admin-ui"', "folder": "admin-ui", "reason": "Vue admin app"}
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        bad = [await s.call_tool("add_service", {**ok_args, **change}) for change in [
+            {"name": "Admin UI"},                                      # not a valid name
+            {"name": "cart"},                                          # already mapped
+            {"kind": "database"},                                      # unknown kind
+            {"quote": '"name": "admin-ui", "v": 2'},                   # not in the file
+            {"name": "admin", "quote": '"name": "admin-ui"'},          # name only as part of a longer word
+            {"folder": ""},                                            # a service needs code
+            {"folder": "../.."},                                       # outside the repo
+            {"folder": "admin-ui/src"},                                # no build file
+            {"folder": "cart", "name": "cart-v2", "quote": "cart-v2 is the rewrite of cart", "file": "cart/NOTES.txt"},
+        ]]
+        good = await s.call_tool("add_service", ok_args)
+        bus = await s.call_tool("add_service", {"graph": GRAPH, "name": "orders-pubsub", "kind": "infra",
+                                                "file": "components/pubsub.yaml", "line": 4, "quote": "name: orders-pubsub"})
+        link = await s.call_tool("add_connection", {"graph": GRAPH, "caller": "admin-ui", "callee": "cart",
+                                                     "file": "admin-ui/src/api.js", "line": 1,
+                                                     "quote": 'export const CART = "http://cart:80";'})
+        remap = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        (repo / "admin-ui/package.json").write_text('{"name": "renamed"}\n')
+        gone = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        return bad, good, bus, link, remap, gone
+
+    bad, good, bus, link, remap, gone = session(steps)
+    msgs = [b.content[0].text for b in bad]
+    assert all(b.is_error for b in bad), msgs
+    for msg, expect in zip(msgs, ["name must be", "already in the map", "kind must be", "not in admin-ui/package.json",
+                                  "as a whole word", "needs its code folder", "outside the repo", "no build file",
+                                  "already the code of 'cart'"]):
+        assert expect in msg, (expect, msg)
+    assert good.structured_content["source_dir"] == "admin-ui" and good.structured_content["origin"] == "ai"
+    assert not bus.is_error and bus.structured_content["source_dir"] == ""
+    assert not link.is_error
+    assert remap.structured_content["inferred_kept"] == 3 and remap.structured_content["stale_services"] == 0
+    assert gone.structured_content["stale_services"] == 1   # admin-ui's proof line changed: kept, marked stale
+
+
+def test_merge_renames_to_the_real_name_and_survives_remap(tmp_path, clean):
+    repo = make(tmp_path / "shop", MESSY_REPO)
+    proof = {"file": "orders/order-service-main/src/main/resources/application.yml", "line": 3, "quote": "name: order-service"}
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        wrong = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "order-service", "drop": "cart", **proof})
+        done = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "order-service", "drop": "order-service-main",
+                                                    **proof, "reason": "spring.application.name"})
+        remap = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        names = await s.call_tool("list_maps", {})
+        old = await s.call_tool("service_calls", {"graph": GRAPH, "service": "order-service-main"})
+        new = await s.call_tool("service_calls", {"graph": GRAPH, "service": "order-service"})
+        return wrong, done, remap, names, old, new
+
+    wrong, done, remap, names, old, new = session(steps)
+    assert wrong.is_error and "no proof these are the same service" in wrong.content[0].text  # quote is not in cart's code
+    assert done.structured_content["action"] == "renamed"
+    assert remap.structured_content["services"] == 4                     # not split again on re-map
+    assert old.is_error and not new.is_error
+    assert new.structured_content["source_dir"] == "orders/order-service-main"
+
+
+def test_merge_folds_a_duplicate_and_keeps_its_calls(tmp_path, clean):
+    repo = make(tmp_path / "shop", MESSY_REPO)
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        no_proof = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "frontend", "drop": "cart",
+                                                        "file": "k8s/frontend.yaml", "line": 3, "quote": "metadata: {name: frontend}"})
+        done = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "frontend", "drop": "front-end",
+                                                    "file": "web/package.json", "line": 1, "quote": '"name": "frontend"'})
+        remap = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        fe = await s.call_tool("service_calls", {"graph": GRAPH, "service": "frontend"})
+        return no_proof, done, remap, fe
+
+    no_proof, done, remap, fe = session(steps)
+    assert no_proof.is_error and "same service" in no_proof.content[0].text  # different folders, quote doesn't name cart
+    assert done.structured_content["action"] == "merged" and done.structured_content["moved"]["calls_out"] == 1
+    assert remap.structured_content["services"] == 3
+    calls = {c["service"]: c for c in fe.structured_content["calls"]}
+    assert set(calls) == {"cart"} and len(calls["cart"]["evidence"]) == 2  # k8s CART_ADDR and web/app.js, merged

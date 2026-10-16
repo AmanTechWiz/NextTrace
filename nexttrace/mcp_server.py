@@ -184,16 +184,21 @@ ORDER BY s.name
 @server.tool(annotations=ToolAnnotations(title="Where the map may be incomplete", read_only_hint=True), structured_output=True)
 @_friendly
 def find_gaps(graph: str) -> dict[str, Any]:
-    """Services the parser may have mapped incompletely, with the folder to read.
+    """Where the map may be incomplete. Each list is computed by the server, not guessed; work through all of them.
 
-    isolated: no known calls in or out. no_service_calls: calls only datastores or infra (a frontend or gateway
-    here usually means missed calls). Read their code, then record each confirmed call with add_connection.
+    unmapped_folders: deployable folders (with a Dockerfile, package.json, pom.xml, go.mod, .csproj, ...) that no
+      service covers. Read each: add the ones that run as a service with add_service; skip shared libraries and tools.
+    possible_duplicates: pairs that may be one service under two names. Find which name the system really uses
+      and merge with merge_services.
+    isolated: services with no known calls in or out. no_service_calls: services that call only datastores or infra
+      (a frontend or gateway here usually means missed calls). Read their code and add calls with add_connection.
     """
     g = _db().select_graph(_graph_name(graph))
     rows = g.ro_query(GAPS).result_set
     if not rows:
         raise ToolError(f"graph {graph!r} has no services; run map_repo first")
     roots = dict(g.ro_query("MATCH (r:MapRun) RETURN r.repo, r.root ORDER BY r.run").result_set)
+    every = g.ro_query("MATCH (s:Service) WHERE NOT coalesce(s.stale, false) RETURN s.name, s.repo, s.source_dir").result_set
     isolated, no_service_calls = [], []
     for name, repo, src, outs, ins, calls_service in rows:
         item = {"service": name, "folder": str(Path(roots.get(repo, "")) / src) if src else "", "callers": ins}
@@ -201,7 +206,11 @@ def find_gaps(graph: str) -> dict[str, Any]:
             isolated.append(item)
         elif not calls_service:
             no_service_calls.append(item)
-    return {"graph": graph, "services": len(rows), "isolated": isolated, "no_service_calls": no_service_calls}
+    unmapped = [str(Path(root) / f) for repo, root in roots.items() if root and Path(root).is_dir()
+                for f in mapper.unmapped_folders(Path(root), [d for _, r, d in every if r == repo])]
+    dups = mapper.possible_duplicates([(n, str(Path(roots.get(r) or "") / d) if d else "") for n, r, d in every])
+    return {"graph": graph, "services": len(rows), "unmapped_folders": unmapped, "possible_duplicates": dups,
+            "isolated": isolated, "no_service_calls": no_service_calls}
 
 
 ADD = """
@@ -270,6 +279,155 @@ def export_map(graph: str, path: str) -> dict[str, Any]:
     out.write_text(json.dumps({"graph": graph, "repos": dict(runs), "services": services, "calls": calls}, indent=2) + "\n")
     return {"path": str(out), "services": len(services), "calls": len(calls),
             "agent_added": sum(1 for c in calls if c["sources"] == ["ai"])}
+
+
+def _repo_root(g, repo: str = ""):
+    """(repo, root, latest run) for the repo a tool call is about; `repo` is required when the graph has several."""
+    runs = g.ro_query("MATCH (r:MapRun) RETURN r.repo, r.root, r.run ORDER BY r.run").result_set
+    latest = {r: (root, run) for r, root, run in runs}
+    if not latest:
+        raise ToolError("this graph has no mapped repo; run map_repo first")
+    if not repo:
+        if len(latest) > 1:
+            raise ToolError(f"this graph holds several repos {sorted(latest)}; pass repo=")
+        repo = next(iter(latest))
+    if repo not in latest or not latest[repo][0]:
+        raise ToolError(f"repo {repo!r} is not mapped in this graph (mapped: {sorted(latest)})")
+    return repo, Path(latest[repo][0]), latest[repo][1]
+
+
+ADD_SERVICE = """
+MERGE (s:Service {name: $name})
+ON CREATE SET s.kind = $kind, s.source_dir = $source_dir, s.declared_in = $declared_in, s.owner = '', s.repo = $repo,
+              s.last_run = $run, s.stale = false, s.origin = 'ai', s.evidence = [$evidence], s.reason = $reason
+RETURN s.origin
+"""
+
+
+@server.tool(annotations=ToolAnnotations(title="Add a service the parser missed", idempotent_hint=True), structured_output=True)
+@_friendly
+def add_service(graph: str, name: str, kind: str, file: str, line: int, quote: str, folder: str = "",
+                reason: str = "", repo: str = "") -> dict[str, Any]:
+    """Add a service, datastore or broker the parser did not find. The server checks the proof first.
+
+    name: the name the system uses for it (how others address it), lowercase. kind: service | datastore | infra.
+    file/line/quote: the exact line that declares or names it (an app id, a compose/k8s/Dapr name, a config key);
+      the quote must contain the name as a whole word.
+    folder: required for kind=service: its code folder, which must contain a build file (Dockerfile, package.json,
+      pom.xml, go.mod, .csproj, ...) and must not already belong to another service (then use merge_services).
+    Stored as origin=ai with the quote; re-checked on every re-map and marked stale if the line disappears.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    if not mapper.SERVICE_NAME.match(name):
+        raise ToolError("name must be lowercase letters, digits, '.', '_' or '-' (max 63)")
+    if kind not in ("service", "datastore", "infra"):
+        raise ToolError("kind must be service, datastore or infra")
+    if g.ro_query("MATCH (s:Service {name: $n}) RETURN count(s)", {"n": name}).result_set[0][0]:
+        raise ToolError(f"{name!r} is already in the map; to fix a second name for it, use merge_services")
+    repo, root, run = _repo_root(g, repo)
+    if not mapper.names_in(quote, name):
+        raise ToolError(f"not added: the quote must contain the name {name!r} as a whole word")
+    try:
+        rel, at = mapper.verify_quote(root, file, line, quote, name)
+    except ValueError as e:
+        raise ToolError(f"not added: {e}") from e
+    source_dir = ""
+    if kind == "service":
+        if not folder:
+            raise ToolError("not added: a service needs its code folder (folder=)")
+        f = (root / folder).resolve() if not Path(folder).is_absolute() else Path(folder).resolve()
+        if root.resolve() != f and root.resolve() not in f.parents:
+            raise ToolError(f"not added: {folder} is outside the repo")
+        if not mapper.deployable(f):
+            raise ToolError(f"not added: {folder} has no build file, so it is not a deployable service")
+        source_dir = str(f.relative_to(root.resolve())) if f != root.resolve() else "."
+        owner = g.ro_query("MATCH (s:Service {repo: $repo, source_dir: $d}) RETURN s.name", {"repo": repo, "d": source_dir}).result_set
+        if owner:
+            raise ToolError(f"not added: {source_dir} is already the code of {owner[0][0]!r}; if that is the same service "
+                            "under another name, use merge_services")
+    from nexttrace.graphdb import ensure_unique
+    ensure_unique(g, "Service", "name")
+    evidence = f"ai | {rel}:{at} | {' '.join(quote.split())[:160]}"
+    g.query(ADD_SERVICE, {"name": name, "kind": kind, "source_dir": source_dir, "declared_in": rel, "repo": repo,
+                          "run": run, "evidence": evidence, "reason": reason[:300]})
+    return {"name": name, "kind": kind, "repo": repo, "source_dir": source_dir, "evidence": evidence, "origin": "ai"}
+
+
+@server.tool(annotations=ToolAnnotations(title="Merge two names of one service", destructive_hint=True), structured_output=True)
+@_friendly
+def merge_services(graph: str, keep: str, drop: str, file: str, line: int, quote: str, reason: str = "") -> dict[str, Any]:
+    """One service appears under two names: keep the name the system really uses, fold the other into it.
+
+    keep: the real name (how callers address it, or how the service names itself). It may not be in the map yet:
+      then `drop` is renamed to it. drop: the wrong or duplicate name; its calls, callers and routes move to keep.
+    file/line/quote: proof that `keep` is the name in use; the quote must contain `keep` as a whole word.
+    The server also needs proof both names are the same code: their folders are the same or nested, or the quote
+    is in drop's own folder (a self-declared name such as spring.application.name), or the quote names both.
+    The old name is remembered as an alias, so re-mapping won't split them again.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    if keep == drop:
+        raise ToolError("keep and drop are the same name")
+    if not mapper.SERVICE_NAME.match(keep):
+        raise ToolError("keep must be lowercase letters, digits, '.', '_' or '-' (max 63)")
+    _require_service(g, graph, drop)
+    d_repo, d_dir = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir", {"n": drop}).result_set[0]
+    k_row = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir", {"n": keep}).result_set
+    repo, root, _ = _repo_root(g, d_repo)
+    if not mapper.names_in(quote, keep):
+        raise ToolError(f"not merged: the quote must contain {keep!r} as a whole word")
+    try:
+        rel, at = mapper.verify_quote(root, file, line, quote, keep)
+    except ValueError as e:
+        raise ToolError(f"not merged: {e}") from e
+    same_code = mapper.names_in(quote, drop) or (d_dir and (rel == d_dir or rel.startswith(d_dir.rstrip("/") + "/") or d_dir == "."))
+    if k_row and k_row[0][1] and d_dir:
+        a, b = Path(k_row[0][1]), Path(d_dir)
+        same_code = same_code or a == b or a in b.parents or b in a.parents
+    if not same_code:
+        raise ToolError("not merged: no proof these are the same service. Cite a line in the drop service's own folder, "
+                        "a line naming both, or merge only when their folders match")
+    evidence = f"ai | {rel}:{at} | {' '.join(quote.split())[:160]}"
+    if not k_row:  # the real name isn't in the map yet: rename
+        g.query("MATCH (s:Service {name: $drop}) SET s.name = $keep, s.aliases = coalesce(s.aliases, []) + [$drop], "
+                "s.merge_evidence = coalesce(s.merge_evidence, []) + [$ev]", {"drop": drop, "keep": keep, "ev": evidence})
+        g.query("MATCH (e:Endpoint {service: $drop}) SET e.service = $keep, e.key = $keep + substring(e.key, size($drop))",
+                {"drop": drop, "keep": keep})
+        return {"kept": keep, "dropped": drop, "action": "renamed", "evidence": evidence}
+    moved = _move_edges(g, drop, keep)
+    g.query("MATCH (k:Service {name: $keep}), (d:Service {name: $drop}) "
+            "SET k.aliases = coalesce(k.aliases, []) + [$drop] + coalesce(d.aliases, []), "
+            "k.merge_evidence = coalesce(k.merge_evidence, []) + [$ev], "
+            "k.source_dir = CASE WHEN coalesce(k.source_dir, '') = '' THEN d.source_dir ELSE k.source_dir END "
+            "DETACH DELETE d", {"keep": keep, "drop": drop, "ev": evidence})
+    return {"kept": keep, "dropped": drop, "action": "merged", "moved": moved, "evidence": evidence}
+
+
+def _move_edges(g, drop, keep) -> dict:
+    """Re-point drop's calls, callers and routes to keep, merging evidence where keep already has the same link."""
+    out = g.ro_query("MATCH (:Service {name: $d})-[c:CALLS]->(x:Service) WHERE x.name <> $k RETURN x.name, properties(c)",
+                     {"d": drop, "k": keep}).result_set
+    inc = g.ro_query("MATCH (x:Service)-[c:CALLS]->(:Service {name: $d}) WHERE x.name <> $k RETURN x.name, properties(c)",
+                     {"d": drop, "k": keep}).result_set
+    q = ("MATCH (a:Service {name: $a}), (b:Service {name: $b}) MERGE (a)-[c:CALLS]->(b) "
+         "ON CREATE SET c += $p "
+         "ON MATCH SET c.evidence = c.evidence + [e IN $p.evidence WHERE NOT e IN c.evidence], "
+         "c.evidence_count = coalesce(c.evidence_count, 0) + coalesce($p.evidence_count, 0)")
+    for x, props in out:
+        g.query(q, {"a": keep, "b": x, "p": props})
+    for x, props in inc:
+        g.query(q, {"a": x, "b": keep, "p": props})
+    routes = g.ro_query("MATCH (e:Endpoint {service: $d}) RETURN e.key", {"d": drop}).result_set
+    for (key,) in routes:
+        new = keep + key[len(drop):]
+        if g.ro_query("MATCH (e:Endpoint {key: $k}) RETURN count(e)", {"k": new}).result_set[0][0]:
+            g.query("MATCH (a:Service)-[c:CALLS_ENDPOINT]->(:Endpoint {key: $old}), (n:Endpoint {key: $new}) "
+                    "MERGE (a)-[m:CALLS_ENDPOINT]->(n) ON CREATE SET m += properties(c)", {"old": key, "new": new})
+            g.query("MATCH (e:Endpoint {key: $old}) DETACH DELETE e", {"old": key})
+        else:
+            g.query("MATCH (e:Endpoint {key: $old}), (k:Service {name: $keep}) SET e.key = $new, e.service = $keep "
+                    "MERGE (k)-[:EXPOSES]->(e)", {"old": key, "new": new, "keep": keep})
+    return {"calls_out": len(out), "callers": len(inc), "routes": len(routes)}
 
 
 if __name__ == "__main__":
