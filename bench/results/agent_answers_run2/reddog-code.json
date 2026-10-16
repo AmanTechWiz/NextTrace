@@ -1,0 +1,237 @@
+{
+  "graph": "reddog-code",
+  "repos": {
+    "reddog-code": "fa46c0a24d34d089cbf6ff904a5bb2ae6f49c154"
+  },
+  "services": [
+    {
+      "name": "accounting-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "app",
+      "kind": "service",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "bootstrapper",
+      "kind": "service",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "corp-transfer-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "db",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "loyalty-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "make-line-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "mssql-deployment",
+      "kind": "datastore",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "order-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "receipt-generation-service",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog-sql",
+      "kind": "datastore",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog.binding.receipt",
+      "kind": "infra",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog.orderservice",
+      "kind": "service",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog.pubsub",
+      "kind": "infra",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog.state.loyalty",
+      "kind": "datastore",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "reddog.state.makeline",
+      "kind": "datastore",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "ui",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "virtual-customers",
+      "kind": "other",
+      "repo": "reddog-code"
+    },
+    {
+      "name": "virtual-worker",
+      "kind": "other",
+      "repo": "reddog-code"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "accounting-service",
+      "callee": "reddog-sql",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.AccountingService/Startup.cs:39 | options.UseSqlServer(Configuration[\"reddog-sql\"]);"
+      ]
+    },
+    {
+      "caller": "accounting-service",
+      "callee": "reddog.pubsub",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.AccountingService/Controllers/AccountingController.cs:20 | private const string PubSubName = \"reddog.pubsub\";"
+      ]
+    },
+    {
+      "caller": "bootstrapper",
+      "callee": "reddog-sql",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.Bootstrapper/Program.cs:92 | var connectionString = Environment.GetEnvironmentVariable(\"reddog-sql\");"
+      ]
+    },
+    {
+      "caller": "loyalty-service",
+      "callee": "reddog.pubsub",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.LoyaltyService/Controllers/LoyaltyController.cs:16 | private const string PubSubName = \"reddog.pubsub\";"
+      ]
+    },
+    {
+      "caller": "loyalty-service",
+      "callee": "reddog.state.loyalty",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.LoyaltyService/Controllers/LoyaltyController.cs:17 | private const string LoyaltyStateStoreName = \"reddog.state.loyalty\";"
+      ]
+    },
+    {
+      "caller": "make-line-service",
+      "callee": "reddog.pubsub",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.MakeLineService/Controllers/MakelineController.cs:21 | private const string PubSubName = \"reddog.pubsub\";"
+      ]
+    },
+    {
+      "caller": "make-line-service",
+      "callee": "reddog.state.makeline",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.MakeLineService/Controllers/MakelineController.cs:22 | private const string MakeLineStateStoreName = \"reddog.state.makeline\";"
+      ]
+    },
+    {
+      "caller": "order-service",
+      "callee": "reddog.pubsub",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.OrderService/Controllers/OrderController.cs:22 | private const string PubSubName = \"reddog.pubsub\";"
+      ]
+    },
+    {
+      "caller": "receipt-generation-service",
+      "callee": "reddog.binding.receipt",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.ReceiptGenerationService/Controllers/ReceiptGenerationController.cs:18 | private const string ReceiptBindingName = \"reddog.binding.receipt\";"
+      ]
+    },
+    {
+      "caller": "receipt-generation-service",
+      "callee": "reddog.pubsub",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.ReceiptGenerationService/Controllers/ReceiptGenerationController.cs:17 | private const string PubSubName = \"reddog.pubsub\";"
+      ]
+    },
+    {
+      "caller": "virtual-customers",
+      "callee": "order-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.VirtualCustomers/VirtualCustomers.cs:15 | private const string OrderServiceDaprId = \"order-service\";"
+      ]
+    },
+    {
+      "caller": "virtual-worker",
+      "callee": "make-line-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | RedDog.VirtualWorker/Controllers/VirtualWorkerController.cs:17 | private const string MakeLineServiceAppId = \"make-line-service\";"
+      ]
+    }
+  ]
+}

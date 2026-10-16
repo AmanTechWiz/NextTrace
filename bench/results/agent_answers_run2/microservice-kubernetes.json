@@ -1,0 +1,88 @@
+{
+  "graph": "microservice-kubernetes",
+  "repos": {
+    "microservice-kubernetes": "db3af1b3c933c48871fab74d45b466f2dfedb6a3"
+  },
+  "services": [
+    {
+      "name": "apache",
+      "kind": "service",
+      "repo": "microservice-kubernetes"
+    },
+    {
+      "name": "catalog",
+      "kind": "service",
+      "repo": "microservice-kubernetes"
+    },
+    {
+      "name": "customer",
+      "kind": "service",
+      "repo": "microservice-kubernetes"
+    },
+    {
+      "name": "order",
+      "kind": "service",
+      "repo": "microservice-kubernetes"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "apache",
+      "callee": "catalog",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | microservice-kubernetes-demo/apache/000-default.conf:17 | ProxyPass        /catalog http://catalog:8080/",
+        "config | microservice-kubernetes-demo/apache/000-default.conf:18 | ProxyPassReverse /catalog http://catalog:8080/"
+      ]
+    },
+    {
+      "caller": "apache",
+      "callee": "customer",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | microservice-kubernetes-demo/apache/000-default.conf:20 | ProxyPass        /customer http://customer:8080/",
+        "config | microservice-kubernetes-demo/apache/000-default.conf:21 | ProxyPassReverse /customer http://customer:8080/"
+      ]
+    },
+    {
+      "caller": "apache",
+      "callee": "order",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | microservice-kubernetes-demo/apache/000-default.conf:14 | ProxyPass        /order http://order:8080/",
+        "config | microservice-kubernetes-demo/apache/000-default.conf:15 | ProxyPassReverse /order http://order:8080/"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "catalog",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | microservice-kubernetes-demo/microservice-kubernetes-demo-order/src/main/java/com/ewolff/microservice/order/clients/CatalogClient.java:36 | public CatalogClient(@Value(\"${catalog.service.host:catalog}\") String catalogServiceHost,"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "customer",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | microservice-kubernetes-demo/microservice-kubernetes-demo-order/src/main/java/com/ewolff/microservice/order/clients/CustomerClient.java:38 | public CustomerClient(@Value(\"${customer.service.host:customer}\") String customerServiceHost,"
+      ]
+    }
+  ]
+}

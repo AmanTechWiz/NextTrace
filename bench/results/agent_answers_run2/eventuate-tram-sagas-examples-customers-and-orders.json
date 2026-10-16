@@ -1,0 +1,101 @@
+{
+  "graph": "eventuate-tram-sagas-examples-customers-and-orders",
+  "repos": {
+    "eventuate-tram-sagas-examples-customers-and-orders": "7f0ab8445fea5720d21fa3500d28e7e05d12cb7f"
+  },
+  "services": [
+    {
+      "name": "api-gateway",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "customer-service",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "kafka",
+      "kind": "infra",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "mysql",
+      "kind": "datastore",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    },
+    {
+      "name": "order-service",
+      "kind": "service",
+      "repo": "eventuate-tram-sagas-examples-customers-and-orders"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "api-gateway",
+      "callee": "customer-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | api-gateway-service/api-gateway-service-main/src/main/resources/application.yml:15 | customerServiceUrl: http://${DOCKER_HOST_IP:localhost}:8082"
+      ]
+    },
+    {
+      "caller": "api-gateway",
+      "callee": "order-service",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | api-gateway-service/api-gateway-service-main/src/main/resources/application.yml:18 | orderServiceUrl: http://${DOCKER_HOST_IP:localhost}:8081"
+      ]
+    },
+    {
+      "caller": "customer-service",
+      "callee": "kafka",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | customer-service/customer-service-main/src/main/resources/application.properties:9 | eventuatelocal.kafka.bootstrap.servers=${DOCKER_HOST_IP:localhost}:9092"
+      ]
+    },
+    {
+      "caller": "customer-service",
+      "callee": "mysql",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | customer-service/customer-service-main/src/main/resources/application.properties:12 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/SHOULD_BE_CUSTOMER_SERVICE"
+      ]
+    },
+    {
+      "caller": "order-service",
+      "callee": "kafka",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | order-service/order-service-main/src/main/resources/application.properties:9 | eventuatelocal.kafka.bootstrap.servers=${DOCKER_HOST_IP:localhost}:9092"
+      ]
+    },
+    {
+      "caller": "order-service",
+      "callee": "mysql",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | order-service/order-service-main/src/main/resources/application.properties:12 | spring.datasource.url=jdbc:mysql://${DOCKER_HOST_IP:localhost}/order_service"
+      ]
+    }
+  ]
+}

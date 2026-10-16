@@ -1,0 +1,418 @@
+{
+  "graph": "acme_fitness_demo",
+  "repos": {
+    "acme_fitness_demo": "594c3926e7ac417ca5b69125d2df31410043408a"
+  },
+  "services": [
+    {
+      "name": "cart",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "cart-redis",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "catalog",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "catalog-db",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "catalog-mongo",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "front-end",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "frontend",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "jaeger",
+      "kind": "infra",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "order",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "order-postgres",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "payment",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "pos",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "postgres",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "redis-db",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "user",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "user-db",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "user-redis-db",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "users",
+      "kind": "other",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "users-mongo",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    },
+    {
+      "name": "users-redis",
+      "kind": "datastore",
+      "repo": "acme_fitness_demo"
+    }
+  ],
+  "calls": [
+    {
+      "caller": "cart",
+      "callee": "cart-redis",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/cart-total.yaml:47 | value: 'cart-redis'"
+      ]
+    },
+    {
+      "caller": "cart",
+      "callee": "redis-db",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose/docker-compose.yml:49 | redis-db"
+      ]
+    },
+    {
+      "caller": "cart",
+      "callee": "user",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:94 | - USER_HOST=user"
+      ]
+    },
+    {
+      "caller": "cart",
+      "callee": "users",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/cart-total.yaml:58 | value: 'users'"
+      ]
+    },
+    {
+      "caller": "catalog",
+      "callee": "catalog-db",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose/docker-compose.yml:4 | catalog-db"
+      ]
+    },
+    {
+      "caller": "catalog",
+      "callee": "catalog-mongo",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/catalog-total.yaml:47 | value: 'catalog-mongo'"
+      ]
+    },
+    {
+      "caller": "catalog",
+      "callee": "user",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:30 | - USERS_HOST=user"
+      ]
+    },
+    {
+      "caller": "catalog",
+      "callee": "users",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/catalog-total.yaml:62 | value: 'users'"
+      ]
+    },
+    {
+      "caller": "front-end",
+      "callee": "cart",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:114 | - CART_HOST=cart"
+      ]
+    },
+    {
+      "caller": "front-end",
+      "callee": "catalog",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:113 | - CATALOG_HOST=catalog"
+      ]
+    },
+    {
+      "caller": "front-end",
+      "callee": "order",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:115 | - ORDER_HOST=order"
+      ]
+    },
+    {
+      "caller": "front-end",
+      "callee": "user",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:112 | - USERS_HOST=user"
+      ]
+    },
+    {
+      "caller": "frontend",
+      "callee": "cart",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/frontend-total.yaml:54 | value: 'cart'"
+      ]
+    },
+    {
+      "caller": "frontend",
+      "callee": "catalog",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/frontend-total.yaml:50 | value: 'catalog'"
+      ]
+    },
+    {
+      "caller": "frontend",
+      "callee": "order",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/frontend-total.yaml:52 | value: 'order'"
+      ]
+    },
+    {
+      "caller": "frontend",
+      "callee": "users",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/frontend-total.yaml:48 | value: 'users'"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "order-postgres",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/order-total.yaml:47 | value: order-postgres"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "payment",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:158 | - PAYMENT_HOST=payment"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "postgres",
+      "sources": [
+        "config"
+      ],
+      "confidence": "high",
+      "evidence": [
+        "config | docker-compose/docker-compose.yml:132 | postgres"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "user",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:161 | - USER_HOST=user"
+      ]
+    },
+    {
+      "caller": "order",
+      "callee": "users",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/order-total.yaml:73 | value: 'users'"
+      ]
+    },
+    {
+      "caller": "payment",
+      "callee": "user",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:174 | - USERS_HOST=user"
+      ]
+    },
+    {
+      "caller": "payment",
+      "callee": "users",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/payment-total.yaml:45 | value: 'users'"
+      ]
+    },
+    {
+      "caller": "pos",
+      "callee": "frontend",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/point-of-sales-total.yaml:50 | value: 'frontend.default.svc.cluster.local'"
+      ]
+    },
+    {
+      "caller": "user",
+      "callee": "user-db",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:68 | - USERS_DB_HOST=user-db"
+      ]
+    },
+    {
+      "caller": "user",
+      "callee": "user-redis-db",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | docker-compose/docker-compose.yml:71 | - REDIS_DB_HOST=user-redis-db"
+      ]
+    },
+    {
+      "caller": "users",
+      "callee": "users-mongo",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/users-total.yaml:47 | value: 'users-mongo'"
+      ]
+    },
+    {
+      "caller": "users",
+      "callee": "users-redis",
+      "sources": [
+        "ai"
+      ],
+      "confidence": "inferred",
+      "evidence": [
+        "ai | kubernetes-manifests/users-total.yaml:60 | value: 'users-redis'"
+      ]
+    }
+  ]
+}
