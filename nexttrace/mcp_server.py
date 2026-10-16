@@ -1,6 +1,7 @@
-"""NextTrace MCP server: lets Claude Code (or any MCP client) map repos and read the maps.
+"""NextTrace MCP server: lets Claude Code (or any MCP client) map repos, read the maps, and fill gaps.
 
-Mapping is the deterministic parser in nexttrace.mapper; no LLM runs here.
+Mapping is the deterministic parser in nexttrace.mapper; no LLM runs here. The connecting agent can add what
+the parser missed with add_connection, which only accepts a quote the server finds in the code.
 
 Run:  uv run python -m nexttrace.mcp_server        (stdio)
 Env:  FALKORDB_HOST (localhost), FALKORDB_PORT (6379)
@@ -24,7 +25,10 @@ server = MCPServer(
     instructions=(
         "NextTrace keeps a graph of a system's services and who calls whom, built from real repos. "
         "Call map_repo once per repo (several repos can share one graph), then list_maps and service_calls to read it. "
-        "Every connection carries evidence (file:line or traffic count): cite it instead of guessing."
+        "Every connection carries evidence (file:line or traffic count): cite it instead of guessing. "
+        "The parser misses some wiring (registries, message buses, generated clients). Use find_gaps to see where, "
+        "read that code, and record each call you confirm with add_connection, quoting the exact line. "
+        "Connections you add are stored as inferred, never as fact."
     ),
 )
 GRAPH_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -165,6 +169,79 @@ def endpoint_calls(graph: str, service: str, path: str = "") -> dict[str, Any]:
     calls = [{"service": sv, "method": m, "path": p, "matched": ok, "evidence": ev}
              for sv, m, p, ok, ev in g.ro_query(OUTGOING, {"name": service}).result_set]
     return {"service": service, "exposes": exposes, "calls": calls}
+
+
+GAPS = """
+MATCH (s:Service {kind: 'service'}) WHERE NOT coalesce(s.stale, false)
+OPTIONAL MATCH (s)-[o:CALLS]->(x:Service) WHERE NOT coalesce(o.stale, false)
+WITH s, collect(DISTINCT x.kind) AS out_kinds, count(x) AS outs
+OPTIONAL MATCH (y:Service)-[i:CALLS]->(s) WHERE NOT coalesce(i.stale, false)
+RETURN s.name, s.repo, s.source_dir, outs, count(y), [k IN out_kinds WHERE k = 'service'] <> []
+ORDER BY s.name
+"""
+
+
+@server.tool(annotations=ToolAnnotations(title="Where the map may be incomplete", read_only_hint=True), structured_output=True)
+@_friendly
+def find_gaps(graph: str) -> dict[str, Any]:
+    """Services the parser may have mapped incompletely, with the folder to read.
+
+    isolated: no known calls in or out. no_service_calls: calls only datastores or infra (a frontend or gateway
+    here usually means missed calls). Read their code, then record each confirmed call with add_connection.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    rows = g.ro_query(GAPS).result_set
+    if not rows:
+        raise ToolError(f"graph {graph!r} has no services; run map_repo first")
+    roots = dict(g.ro_query("MATCH (r:MapRun) RETURN r.repo, r.root ORDER BY r.run").result_set)
+    isolated, no_service_calls = [], []
+    for name, repo, src, outs, ins, calls_service in rows:
+        item = {"service": name, "folder": str(Path(roots.get(repo, "")) / src) if src else "", "callers": ins}
+        if outs == 0 and ins == 0:
+            isolated.append(item)
+        elif not calls_service:
+            no_service_calls.append(item)
+    return {"graph": graph, "services": len(rows), "isolated": isolated, "no_service_calls": no_service_calls}
+
+
+ADD = """
+MATCH (a:Service {name: $caller}), (b:Service {name: $callee})
+MERGE (a)-[c:CALLS]->(b)
+ON CREATE SET c.sources = ['ai'], c.confidence = 'inferred', c.evidence = [$evidence], c.evidence_count = 1,
+              c.repo = a.repo, c.last_run = $run, c.stale = false, c.reason = $reason
+RETURN c.sources, c.confidence, c.evidence
+"""
+
+
+@server.tool(annotations=ToolAnnotations(title="Add a call you found in the code", idempotent_hint=True), structured_output=True)
+@_friendly
+def add_connection(graph: str, caller: str, callee: str, file: str, line: int, quote: str, reason: str = "") -> dict[str, Any]:
+    """Record that `caller` calls `callee`, with proof. The server checks the proof before storing anything.
+
+    file: path inside the caller's repo (relative to the repo root, or absolute).
+    line: line number of the call. quote: the exact code on that line (copy it; must mention the callee).
+    reason: one sentence on how the call works, e.g. "Feign client resolved through Eureka".
+    Stored as confidence=inferred, sources=['ai']. If the parser already has this call, nothing changes.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    if caller == callee:
+        raise ToolError("caller and callee are the same service")
+    for name in (caller, callee):
+        _require_service(g, graph, name)
+    repo = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo", {"n": caller}).result_set[0][0]
+    run = g.ro_query("MATCH (r:MapRun {repo: $repo}) RETURN r.root, r.run ORDER BY r.run DESC LIMIT 1",
+                     {"repo": repo}).result_set
+    if not run or not run[0][0]:
+        raise ToolError(f"repo {repo!r} has no recorded folder; run map_repo on it again")
+    try:
+        rel, at = mapper.verify_quote(Path(run[0][0]), file, line, quote, callee)
+    except ValueError as e:
+        raise ToolError(f"not added: {e}") from e
+    evidence = f"ai | {rel}:{at} | {' '.join(quote.split())[:160]}"
+    sources, confidence, stored = g.query(ADD, {"caller": caller, "callee": callee, "evidence": evidence,
+                                                 "run": run[0][1], "reason": reason[:300]}).result_set[0]
+    return {"caller": caller, "callee": callee, "sources": sources, "confidence": confidence, "evidence": stored,
+            "already_known": sources != ["ai"]}
 
 
 if __name__ == "__main__":

@@ -48,7 +48,8 @@ def clean():
 def test_tools_are_listed_with_read_only_hints():
     tools = session(lambda s: s.list_tools()).tools
     hints = {t.name: bool(t.annotations and t.annotations.read_only_hint) for t in tools}
-    assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True}
+    assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True,
+                     "find_gaps": True, "add_connection": False}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -124,3 +125,74 @@ def test_database_down_gives_actionable_error(tmp_path):
     env = {"FALKORDB_PORT": "6390", "PATH": "/usr/bin:/bin"}  # nothing listens on 6390
     res = session(lambda s: s.call_tool("map_repo", {"path": str(repo)}), env=env)
     assert res.is_error and "not reachable at localhost:6390" in res.content[0].text
+
+
+REGISTRY_REPO = {
+    "docker-compose.yml": "services:\n  gateway: {build: ./gateway}\n  orders: {build: ./orders}\n  pay: {build: ./pay}\n",
+    # wired through a registry: no address the parser can read
+    "gateway/Routes.java": "route(\"/orders/**\").to(Service.ORDERS);\n",
+    "orders/Client.java": "class C {\n  // calls payment through the registry\n  Response r = lb.call(Service.PAY, \"/charge\");\n}\n",
+    "pay/app.py": "",
+}
+
+
+def test_ai_fills_gaps_only_with_a_verified_quote(tmp_path, clean):
+    repo = make(tmp_path / "shop", REGISTRY_REPO)
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        gaps = await s.call_tool("find_gaps", {"graph": GRAPH})
+        bad = [await s.call_tool("add_connection", {"graph": GRAPH, **args}) for args in [
+            {"caller": "orders", "callee": "pay", "file": "orders/Client.java", "line": 3, "quote": "paymentClient.charge()"},
+            {"caller": "orders", "callee": "pay", "file": "orders/Client.java", "line": 40, "quote": "lb.call(Service.PAY, \"/charge\")"},
+            {"caller": "orders", "callee": "pay", "file": "../../../etc/hosts", "line": 1, "quote": "localhost entry here"},
+            {"caller": "orders", "callee": "gateway", "file": "orders/Client.java", "line": 3, "quote": "lb.call(Service.PAY, \"/charge\")"},
+            {"caller": "orders", "callee": "payments", "file": "orders/Client.java", "line": 3, "quote": "lb.call(Service.PAY, \"/charge\")"},
+        ]]
+        good = await s.call_tool("add_connection", {"graph": GRAPH, "caller": "orders", "callee": "pay",
+                                                     "file": "orders/Client.java", "line": 2,  # off by one is fine
+                                                     "quote": "Response r = lb.call(Service.PAY, \"/charge\");",
+                                                     "reason": "registry call"})
+        again = await s.call_tool("add_connection", {"graph": GRAPH, "caller": "orders", "callee": "pay",
+                                                      "file": "orders/Client.java", "line": 3,
+                                                      "quote": "lb.call(Service.PAY, \"/charge\")"})
+        after = await s.call_tool("service_calls", {"graph": GRAPH, "service": "orders"})
+        return gaps, bad, good, again, after
+
+    gaps, bad, good, again, after = session(steps)
+    assert {g["service"] for g in gaps.structured_content["isolated"]} == {"gateway", "orders", "pay"}
+    assert gaps.structured_content["isolated"][0]["folder"].endswith("gateway")
+    reasons = [b.content[0].text for b in bad]
+    assert all(b.is_error for b in bad)
+    assert "not in orders/Client.java near line 3" in reasons[0]   # invented code
+    assert "near line 40" in reasons[1]                            # right code, wrong place
+    assert "outside the mapped repo" in reasons[2]                 # path traversal
+    assert "does not mention 'gateway'" in reasons[3]              # real line, wrong callee
+    assert "did you mean ['pay']" not in reasons[4] and "no service 'payments'" in reasons[4]
+    g = good.structured_content
+    assert (g["sources"], g["confidence"], g["already_known"]) == (["ai"], "inferred", False)
+    assert g["evidence"] == ['ai | orders/Client.java:3 | Response r = lb.call(Service.PAY, "/charge");']  # real line kept
+    assert again.structured_content["evidence"] == g["evidence"]  # idempotent
+    (call,) = after.structured_content["calls"]
+    assert (call["service"], call["confidence"]) == ("pay", "inferred")
+
+
+def test_inferred_call_survives_remap_until_its_line_is_deleted(tmp_path, clean):
+    repo = make(tmp_path / "shop", REGISTRY_REPO)
+    add = {"graph": GRAPH, "caller": "orders", "callee": "pay", "file": "orders/Client.java", "line": 3,
+           "quote": "lb.call(Service.PAY, \"/charge\")"}
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        await s.call_tool("add_connection", add)
+        (repo / "orders/Client.java").write_text("class C {\n\n\n  // moved down\n  lb.call(Service.PAY, \"/charge\");\n}\n")
+        moved = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        (repo / "orders/Client.java").write_text("class C {}\n")
+        deleted = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        calls = await s.call_tool("service_calls", {"graph": GRAPH, "service": "orders"})
+        return moved, deleted, calls
+
+    moved, deleted, calls = session(steps)
+    assert moved.structured_content["inferred_kept"] == 1 and moved.structured_content["stale_calls"] == 0
+    assert deleted.structured_content["inferred_kept"] == 0 and deleted.structured_content["stale_calls"] == 1
+    assert calls.structured_content["calls"][0]["stale"] is True  # kept for history, marked stale

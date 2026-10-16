@@ -58,6 +58,7 @@ class Evidence:
 class ServiceMap:
     repo: str
     commit: str
+    root: str = ""  # absolute path, so AI-added evidence can be re-checked against the code
     services: dict = field(default_factory=dict)  # name -> {kind, source_dir, declared_in, owner}
     known: set = field(default_factory=set)       # services mapped from other repos into the same graph
     edges: dict = field(default_factory=lambda: defaultdict(set))  # (caller, callee) -> {Evidence}
@@ -252,7 +253,7 @@ def _kind(name, s):
 
 def scan(repo, known=()) -> ServiceMap:
     repo = Path(repo).resolve()
-    m = ServiceMap(repo=repo.name, commit=_commit(repo), known=set(known))
+    m = ServiceMap(repo=repo.name, commit=_commit(repo), root=str(repo), known=set(known))
     pending = []  # (caller, value, file, mode) found while reading declarations
     _k8s(repo, m, pending)
     _compose(repo, m, pending)
@@ -357,7 +358,7 @@ MARK_STALE_CALLS = "MATCH ()-[c:CALLS {repo: $repo}]->() WHERE c.last_run <> $ru
 
 RECORD_RUN = """
 OPTIONAL MATCH (r:MapRun) WITH count(r) + 1 AS run
-CREATE (:MapRun {run: run, repo: $repo, commit: $commit, services: $services, calls: $calls, at: timestamp()})
+CREATE (:MapRun {run: run, repo: $repo, root: $root, commit: $commit, services: $services, calls: $calls, at: timestamp()})
 RETURN run
 """
 
@@ -365,19 +366,76 @@ RETURN run
 def write(graph, m: ServiceMap) -> dict:
     rows = edge_rows(m)
     p = {"repo": m.repo, "commit": m.commit}
-    run = graph.query(RECORD_RUN, {**p, "services": len(m.services), "calls": len(rows)}).result_set[0][0]
+    run = graph.query(RECORD_RUN, {**p, "root": m.root, "services": len(m.services), "calls": len(rows)}).result_set[0][0]
     from nexttrace.graphdb import ensure_unique
     ensure_unique(graph, "Service", "name")
     p["run"] = run
     graph.query(UPSERT_SERVICES, {**p, "rows": [{"name": n, **{k: s[k] for k in ("kind", "source_dir", "declared_in", "owner")}}
                                                for n, s in sorted(m.services.items())]})
     graph.query(UPSERT_CALLS, {**p, "rows": rows})
-    return {"run": run, "repo": m.repo, "commit": m.commit, "services": len(m.services), "calls": len(rows),
+    kept = recheck_inferred(graph, m.repo, Path(m.root), run) if m.root else 0
+    return {"inferred_kept": kept, "run": run, "repo": m.repo, "commit": m.commit, "services": len(m.services), "calls": len(rows),
             "stale_services": graph.query(MARK_STALE_SERVICES, p).result_set[0][0],
             "stale_calls": graph.query(MARK_STALE_CALLS, p).result_set[0][0],
             "by_kind": dict(Counter(s["kind"] for s in m.services.values())),
             "by_confidence": dict(Counter(r["confidence"] for r in rows)),
             "cross_repo_calls": sum(1 for r in rows if r["callee"] in m.known and r["callee"] not in m.services)}
+
+
+# ---------- connections added by an AI agent (inferred, always with a verified quote) ----------
+
+GENERIC = {"service", "services", "svc", "api", "app", "server", "srv", "web", "ts", "ms", "the", "and"}
+
+
+def callee_tokens(callee: str) -> set:
+    """Words a quote must contain to plausibly refer to `callee`: catalog-api -> {catalog}."""
+    words = {w for w in re.split(r"[^a-z0-9]+", callee.lower()) if len(w) >= 3 and w not in GENERIC}
+    return words or {callee.lower()}
+
+
+def verify_quote(root: Path, file: str, line: int, quote: str, callee: str, slack: int = 3):
+    """The citation check: `quote` must be real code in `file` (inside `root`), within `slack` lines of `line`,
+    and must mention the callee. Returns (relative path, actual line). Raises ValueError with the reason."""
+    root = root.resolve()
+    path = (root / file).resolve() if not Path(file).is_absolute() else Path(file).resolve()
+    if root != path and root not in path.parents:
+        raise ValueError(f"{file} is outside the mapped repo {root}")
+    if not path.is_file():
+        raise ValueError(f"no such file in the repo: {file}")
+    norm = lambda t: " ".join(t.split())
+    q = norm(quote)
+    if len(q) < 8:
+        raise ValueError("quote too short: copy the exact code line that makes the call")
+    lines = path.read_text(errors="ignore").splitlines()
+    near = [i for i in range(max(1, line - slack), min(len(lines), line + slack) + 1) if q in norm(lines[i - 1])]
+    if not near:
+        raise ValueError(f"the quote is not in {file} near line {line}")
+    if not any(t in q.lower() for t in callee_tokens(callee)):
+        raise ValueError(f"the quote does not mention {callee!r}; cite the line that names or addresses it")
+    return str(path.relative_to(root)), min(near, key=lambda i: abs(i - line))
+
+
+INFERRED = """
+MATCH (a:Service {repo: $repo})-[c:CALLS]->(b:Service)
+WHERE c.sources = ['ai']
+RETURN a.name, b.name, c.evidence
+"""
+
+
+def recheck_inferred(graph, repo, root: Path, run) -> int:
+    """Keep AI-added calls whose quoted line is still in the code; the rest become stale with everything else."""
+    kept = 0
+    for a, b, evidence in graph.ro_query(INFERRED, {"repo": repo}).result_set:
+        _, where, quote = evidence[0].split(" | ", 2)
+        file, line = where.rsplit(":", 1)
+        try:
+            verify_quote(root, file, int(line), quote, b, slack=10_000)  # code may have moved within the file
+        except ValueError:
+            continue
+        graph.query("MATCH (:Service {name: $a})-[c:CALLS]->(:Service {name: $b}) SET c.last_run = $run, c.stale = false",
+                    {"a": a, "b": b, "run": run})
+        kept += 1
+    return kept
 
 
 def known_services(graph, repo_name) -> set:
