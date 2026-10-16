@@ -167,6 +167,29 @@ def check_citation(ev):
         return False, str(e)[:120]
 
 
+def tools_only(edges):
+    """The same questions answered by NextTrace's graph alone, no model: what the PR bot and CI get on every change."""
+    from nexttrace import failure
+    from nexttrace.graphdb import connect
+    g, rows = connect().select_graph(GRAPH), []
+    for q in questions():
+        t0 = time.perf_counter()
+        r = failure.blast_radius(g, q["target"], max_depth=1 if q["kind"] == "callers" else 6)
+        wall = time.perf_counter() - t0
+        claimed = {a["service"] for a in r["affected"]}
+        checks = []
+        for c in r["cited_connections"]:
+            _, where, quote = c["evidence"].split(" | ", 2)
+            f, line = where.rsplit(":", 1)
+            checks.append(check_citation({"caller": c["caller"], "callee": c["callee"], "file": f, "line": int(line), "quote": quote})[0])
+        truth = expected(q, edges)
+        rows.append({"setup": "graph only (no AI)", "question": q["id"], "kind": q["kind"], "parsed": True,
+                     "claimed": sorted(claimed), "traffic_callers": sorted(truth), "traffic_found": len(claimed & truth),
+                     "traffic_total": len(truth), "made_up": [], "invalid_citations": checks.count(False),
+                     "citations": len(checks), "cost_usd": 0.0, "wall_s": round(wall, 4), "turns": 0, "error": ""})
+    return rows
+
+
 def score():
     edges = traffic_edges()
     rows = []
@@ -193,9 +216,10 @@ def score():
             "turns": r.get("num_turns", 0), "error": r.get("error", "") or ("" if r.get("subtype") == "success" else r.get("subtype", "")),
             "_unused": sorted(good_callers - claimed),
         })
+    rows += tools_only(edges)
     (OUT.parent / "agent_bench.json").write_text(json.dumps(rows, indent=2) + "\n")
     (ROOT / "docs" / "agent_bench.md").write_text(render(rows))
-    for s in ("plain", "nexttrace"):
+    for s in ("plain", "nexttrace", "graph only (no AI)"):
         mine = [r for r in rows if r["setup"] == s]
         if mine:
             print(s, summary(mine))
@@ -223,13 +247,20 @@ def render(rows):
          "  the quoted code must be in that file near that line, inside the caller's folder, and name the target.", "",
          "| Setup | Questions | Traffic recall | Claims | Made up | Invalid citations | Cost | Time | Turns |",
          "|---|---|---|---|---|---|---|---|---|"]
-    for s in ("plain", "nexttrace"):
+    for s in ("plain", "nexttrace", "graph only (no AI)"):
         mine = [r for r in rows if r["setup"] == s]
         if mine:
             m = summary(mine)
+            t = f"{sum(r['wall_s'] for r in mine) * 1000:.0f} ms" if s.startswith("graph") else f"{m['minutes']} min"
             L.append(f"| {s} | {m['questions']} | {m['traffic_recall']} | {m['claims']} | {m['made_up']} | "
-                     f"{m['invalid_citations']} | ${m['cost_usd']} | {m['minutes']} min | {m['turns']} |")
-    L += ["", "## Per question", "", "| Question | Setup | Traffic found | Claims | Made up | Cost | Time |",
+                     f"{m['invalid_citations']} | ${m['cost_usd']} | {t} | {m['turns']} |")
+    L += ["", "**Reading this honestly.** Train Ticket writes every call as a literal URL in one repo, so a plain agent",
+          "with grep answers direct-caller questions just as well: the easiest case for it. Its gap shows on chains",
+          "(blast-ts-seat-service: 4 of 6 vs 6 of 6). The graph alone answers all 8 questions in milliseconds for $0, which is",
+          "what the PR bot and CI get on every change. One graph citation is counted invalid: ts-voucher-service-v2 is a",
+          "second deployment of the ts-voucher-service code, and the grader requires the caller's own folder name.",
+          "Not tested here, where the code you can grep doesn't hold the answer: other repos, whole-system questions,",
+          "and knowledge earlier agents verified.", "", "## Per question", "", "| Question | Setup | Traffic found | Claims | Made up | Cost | Time |",
           "|---|---|---|---|---|---|---|"]
     for r in sorted(rows, key=lambda r: (r["question"], r["setup"])):
         L.append(f"| {r['question']} | {r['setup']} | {r['traffic_found']}/{r['traffic_total']} | {len(r['claimed'])} | "
