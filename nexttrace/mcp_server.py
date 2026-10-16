@@ -244,5 +244,33 @@ def add_connection(graph: str, caller: str, callee: str, file: str, line: int, q
             "already_known": sources != ["ai"]}
 
 
+@server.tool(annotations=ToolAnnotations(title="Save a map to a file", idempotent_hint=True), structured_output=True)
+@_friendly
+def export_map(graph: str, path: str) -> dict[str, Any]:
+    """Write the graph's services and current (non-stale) calls to a JSON file, exactly as stored.
+
+    path: absolute path ending in .json; its folder must exist. The server writes the file, so it is a faithful
+    copy of the graph (parser and agent-added calls, each with sources, confidence and evidence).
+    """
+    import json
+    out = Path(path).expanduser()
+    if not out.is_absolute() or out.suffix != ".json":
+        raise ToolError("path must be an absolute path ending in .json")
+    if not out.parent.is_dir():
+        raise ToolError(f"folder does not exist: {out.parent}")
+    g = _db().select_graph(_graph_name(graph))
+    services = [{"name": n, "kind": k, "repo": r} for n, k, r in g.ro_query(
+        "MATCH (s:Service) WHERE NOT coalesce(s.stale, false) RETURN s.name, s.kind, s.repo ORDER BY s.name").result_set]
+    if not services:
+        raise ToolError(f"graph {graph!r} has no services; run map_repo first")
+    calls = [{"caller": a, "callee": b, "sources": src, "confidence": conf, "evidence": ev} for a, b, src, conf, ev in g.ro_query(
+        "MATCH (a:Service)-[c:CALLS]->(b:Service) WHERE NOT coalesce(c.stale, false) "
+        "RETURN a.name, b.name, c.sources, c.confidence, c.evidence ORDER BY a.name, b.name").result_set]
+    runs = g.ro_query("MATCH (r:MapRun) RETURN r.repo, r.commit ORDER BY r.run").result_set
+    out.write_text(json.dumps({"graph": graph, "repos": dict(runs), "services": services, "calls": calls}, indent=2) + "\n")
+    return {"path": str(out), "services": len(services), "calls": len(calls),
+            "agent_added": sum(1 for c in calls if c["sources"] == ["ai"])}
+
+
 if __name__ == "__main__":
     server.run(transport="stdio")

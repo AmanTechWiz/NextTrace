@@ -20,5 +20,3 @@ roadmap.html
 # macOS
 .DS_Store
 
-# Sandbox copies of eval repos (agent works here)
-agent-sandbox/repos/

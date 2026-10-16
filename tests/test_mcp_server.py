@@ -49,7 +49,7 @@ def test_tools_are_listed_with_read_only_hints():
     tools = session(lambda s: s.list_tools()).tools
     hints = {t.name: bool(t.annotations and t.annotations.read_only_hint) for t in tools}
     assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True,
-                     "find_gaps": True, "add_connection": False}
+                     "find_gaps": True, "add_connection": False, "export_map": False}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -196,3 +196,27 @@ def test_inferred_call_survives_remap_until_its_line_is_deleted(tmp_path, clean)
     assert moved.structured_content["inferred_kept"] == 1 and moved.structured_content["stale_calls"] == 0
     assert deleted.structured_content["inferred_kept"] == 0 and deleted.structured_content["stale_calls"] == 1
     assert calls.structured_content["calls"][0]["stale"] is True  # kept for history, marked stale
+
+
+def test_export_map_writes_the_graph_as_stored(tmp_path, clean):
+    import json
+    repo = make(tmp_path / "shop", REGISTRY_REPO)
+    (tmp_path / "answers").mkdir()
+    out = tmp_path / "answers" / "shop.json"
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        await s.call_tool("add_connection", {"graph": GRAPH, "caller": "orders", "callee": "pay", "file": "orders/Client.java",
+                                             "line": 3, "quote": "lb.call(Service.PAY, \"/charge\")"})
+        bad = [await s.call_tool("export_map", {"graph": GRAPH, "path": p}) for p in
+               ("answers/shop.json", str(tmp_path / "answers" / "shop.txt"), str(tmp_path / "nope" / "x.json"))]
+        ok = await s.call_tool("export_map", {"graph": GRAPH, "path": str(out)})
+        return bad, ok
+
+    bad, ok = session(steps)
+    assert all(b.is_error for b in bad)
+    assert ok.structured_content == {"path": str(out), "services": 3, "calls": 1, "agent_added": 1}
+    data = json.loads(out.read_text())
+    assert data["calls"] == [{"caller": "orders", "callee": "pay", "sources": ["ai"], "confidence": "inferred",
+                              "evidence": ['ai | orders/Client.java:3 | lb.call(Service.PAY, "/charge")']}]
+    assert {s["name"] for s in data["services"]} == {"gateway", "orders", "pay"} and "shop" in data["repos"]

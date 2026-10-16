@@ -6,8 +6,9 @@ Protocol (so the score means something):
   3. Score once. No mapper change is made to improve these numbers; a later fix needs a fresh set of repos.
 
   uv run python -m bench.generalization                # parser alone, repos in data/eval/<name>
-  uv run python -m bench.generalization --from-graph   # what's in FalkorDB graph <name> after an agent filled gaps
-                                                       # (agent-sandbox/, /MapRepo all); writes *_agent.* outputs
+  uv run python -m bench.generalization --answers ~/Desktop/nexttrace-sandbox/answers
+      # score the maps an agent produced in its own sandbox (/MapRepo all writes answers/<repo>.json there).
+      # The answer key never leaves this repo; the sandbox holds only the repos. Writes *_agent.* outputs.
 
 Edges:
   sync:  A calls B directly (HTTP/gRPC).
@@ -95,20 +96,21 @@ KEY = {
 }
 
 
-def from_graph(name):
-    """Edges and kinds as stored in FalkorDB graph `name` (parser + agent-added), stale ones excluded."""
-    from falkordb import FalkorDB
-    g = FalkorDB().select_graph(name)
-    kinds = dict(g.ro_query("MATCH (s:Service) WHERE NOT coalesce(s.stale, false) RETURN s.name, s.kind").result_set)
-    rows = g.ro_query("MATCH (a:Service)-[c:CALLS]->(b:Service) WHERE NOT coalesce(c.stale, false) "
-                      "RETURN a.name, b.name, c.sources").result_set
-    return {(a, b) for a, b, _ in rows}, kinds, {(a, b) for a, b, src in rows if src == ["ai"]}
+def from_answers(folder, name):
+    """Edges and kinds from answers/<name>.json, written by the MCP server's export_map in the agent's sandbox."""
+    f = Path(folder).expanduser() / f"{name}.json"
+    if not f.is_file():
+        return set(), {}, set()  # the agent produced no map for this repo: it scores zero
+    data = json.loads(f.read_text())
+    kinds = {s["name"]: s["kind"] for s in data["services"]}
+    return ({(c["caller"], c["callee"]) for c in data["calls"]}, kinds,
+            {(c["caller"], c["callee"]) for c in data["calls"] if c["sources"] == ["ai"]})
 
 
-def score(name, key, graph=False):
-    if graph:
-        edges, kinds, ai = from_graph(name)
-        commit = "graph"
+def score(name, key, answers=None):
+    if answers:
+        edges, kinds, ai = from_answers(answers, name)
+        commit = "agent"
     else:
         m = mapper.scan(ROOT / "data" / "eval" / name)
         edges, kinds, ai, commit = set(m.edges), {n: s["kind"] for n, s in m.services.items()}, set(), m.commit
@@ -176,9 +178,10 @@ def render(rows):
 def main():
     import argparse
     ap = argparse.ArgumentParser()
-    ap.add_argument("--from-graph", action="store_true", help="score the FalkorDB graphs instead of a fresh parser run")
-    graph = ap.parse_args().from_graph
-    rows = [score(n, k, graph) for n, k in KEY.items()]
+    ap.add_argument("--answers", help="folder of <repo>.json maps exported by an agent (instead of a fresh parser run)")
+    answers = ap.parse_args().answers
+    graph = bool(answers)
+    rows = [score(n, k, answers) for n, k in KEY.items()]
     out = ROOT / "bench" / "results"
     out.mkdir(parents=True, exist_ok=True)
     suffix = "_agent" if graph else ""
