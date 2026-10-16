@@ -362,7 +362,7 @@ UPSERT_ROUTES = """
 UNWIND $rows AS r
 MATCH (s:Service {name: r.service})
 MERGE (e:Endpoint {key: r.key})
-SET e.service = r.service, e.method = r.method, e.path = r.path, e.where = r.where, e.declared = true,
+SET e.service = r.service, e.method = r.method, e.path = r.path, e.name = r.method + ' ' + r.path, e.where = r.where, e.declared = true,
     e.repo = $repo, e.last_run = $run, e.stale = false
 MERGE (s)-[x:EXPOSES]->(e)
 SET x.repo = $repo, x.last_run = $run
@@ -374,6 +374,7 @@ MATCH (a:Service {name: r.caller})
 MERGE (e:Endpoint {key: r.key})
 ON CREATE SET e.service = r.callee, e.method = r.method, e.path = r.path, e.declared = false,
               e.repo = $repo, e.last_run = $run, e.stale = false
+SET e.name = coalesce(e.name, r.method + ' ' + r.path)
 MERGE (a)-[c:CALLS_ENDPOINT]->(e)
 SET c.evidence = r.evidence, c.evidence_count = r.count, c.matched = r.matched,
     c.repo = $repo, c.last_run = $run, c.stale = false

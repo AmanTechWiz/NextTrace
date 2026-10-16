@@ -149,6 +149,9 @@ def test_written_to_graph_idempotent_stale_and_cross_repo(tmp_path, graph):
     assert (o2["endpoint_calls"], o2["stale_endpoint_calls"]) == (1, 0)
     g = FalkorDB().select_graph(graph)
     q = "MATCH (a:Service)-[c:CALLS_ENDPOINT]->(e:Endpoint) RETURN a.name, e.key, c.matched, c.stale"
+    # every endpoint has a readable `name` (graph viewers show it instead of the internal id)
+    assert g.ro_query("MATCH (e:Endpoint) WHERE e.name IS NULL RETURN count(e)").result_set == [[0]]
+    assert g.ro_query("MATCH (e:Endpoint {method: 'GET', path: '/api/v1/seats/{seatId}'}) RETURN e.name").result_set == [["GET /api/v1/seats/{seatId}"]]
     assert g.ro_query(q).result_set == [["orders", "seats GET /api/v1/seats/{seatId}", True, False]]
 
     (orders / "src/main/java/O.java").write_text("class O {}\n")  # the call is removed
