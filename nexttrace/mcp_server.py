@@ -18,7 +18,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
-from nexttrace import mapper
+from nexttrace import failure, mapper
 from nexttrace.graphdb import connect
 
 server = MCPServer(
@@ -29,7 +29,9 @@ server = MCPServer(
         "Every connection carries evidence (file:line or traffic count): cite it instead of guessing. "
         "The parser misses some wiring (registries, message buses, generated clients). Use find_gaps to see where, "
         "read that code, and record each call you confirm with add_connection, quoting the exact line. "
-        "Connections you add are stored as inferred, never as fact. For questions the tools don't answer, "
+        "Connections you add are stored as inferred, never as fact. For failures use blast_radius (what breaks), "
+        "failure_paths (how requests reach a service) and criticality (what matters most); cite their connections. "
+        "For questions the tools don't answer, "
         "get_graph_schema then query_graph_readonly runs your own read-only Cypher (including FalkorDB's graph "
         "algorithms); the map itself only changes through the checked tools."
     ),
@@ -638,6 +640,46 @@ def query_graph_readonly(graph: str, query: str, params: dict[str, Any] | None =
     rows = [[_plain(v) for v in row] for row in res.result_set]
     return {"columns": [h[1] if isinstance(h, (list, tuple)) else h for h in res.header], "rows": rows[:max_rows],
             "row_count": len(rows), "truncated": len(rows) > max_rows, "run_time_ms": res.run_time_ms}
+
+
+# ---------- failure questions (nexttrace.failure): answered in FalkorDB, every answer cites its connections ----------
+
+def _ask(fn, graph, *args, **kwargs):
+    g = _db().select_graph(_graph_name(graph))
+    try:
+        return fn(g, *args, **kwargs)
+    except ValueError as e:
+        raise ToolError(str(e)) from e
+
+
+@server.tool(annotations=ToolAnnotations(title="What breaks if a service fails", read_only_hint=True), structured_output=True)
+@_friendly
+def blast_radius(graph: str, service: str, max_depth: int = 6, include_stale: bool = False) -> dict[str, Any]:
+    """Everything that breaks if `service` fails: its callers and their callers (up to max_depth hops), each with the
+    shortest chain to the failure, the weakest confidence on that chain, its owner, and the evidence for every hop.
+    Also returns the owners to notify, the entry points hit (where users feel it) and every cited connection."""
+    return _ask(failure.blast_radius, graph, service, max_depth=max_depth, include_stale=include_stale)
+
+
+@server.tool(annotations=ToolAnnotations(title="How requests reach a service", read_only_hint=True), structured_output=True)
+@_friendly
+def failure_paths(graph: str, service: str, from_service: str = "", max_paths: int = 10, max_depth: int = 6,
+                  include_stale: bool = False) -> dict[str, Any]:
+    """The shortest call chains that reach `service`, from `from_service` or from every entry point (services nothing
+    calls). Ties are all kept. Use it to explain how a failure in `service` reaches users, or how A depends on B.
+    Each hop cites its evidence; entry points with no route are listed as not_reached."""
+    return _ask(failure.failure_paths, graph, service, from_service=from_service, max_paths=max_paths,
+                max_depth=max_depth, include_stale=include_stale)
+
+
+@server.tool(annotations=ToolAnnotations(title="Which services matter most", read_only_hint=True), structured_output=True)
+@_friendly
+def criticality(graph: str, top: int = 10, service: str = "", kind: str = "", include_stale: bool = False) -> dict[str, Any]:
+    """Rank services by how much depends on them: dependents (how many break if it fails), betweenness (bridges and
+    single points of failure, FalkorDB algo.betweenness over all sources) and PageRank (FalkorDB algo.pageRank).
+    service: get one service's metrics and rank. kind: rank only service | datastore | infra | other.
+    Each ranked service cites its direct callers' connections."""
+    return _ask(failure.criticality, graph, top=top, service=service, kind=kind, include_stale=include_stale)
 
 
 if __name__ == "__main__":

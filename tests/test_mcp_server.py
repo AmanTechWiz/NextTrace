@@ -52,7 +52,8 @@ def test_tools_are_listed_with_read_only_hints():
                      "find_gaps": True, "add_connection": False, "export_map": False,
                      "add_service": False, "merge_services": False, "set_service_folder": False,
                      "remove_service": False, "remove_connection": False, "list_graphs": True,
-                     "get_graph_schema": True, "query_graph_readonly": True}
+                     "get_graph_schema": True, "query_graph_readonly": True,
+                     "blast_radius": True, "failure_paths": True, "criticality": True}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -546,3 +547,30 @@ def test_connection_settings_reach_the_client(monkeypatch):
     monkeypatch.setenv("FALKORDB_TLS", "false")
     graphdb.connect()
     assert seen["username"] is None and seen["password"] is None and seen["ssl"] is False   # empty means unset
+
+
+def test_failure_tools_over_mcp(tmp_path, clean):
+    repo = make(tmp_path / "shop", {**MESSY_REPO})
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        blast = await s.call_tool("blast_radius", {"graph": GRAPH, "service": "cart"})
+        paths = await s.call_tool("failure_paths", {"graph": GRAPH, "service": "cart"})
+        crit = await s.call_tool("criticality", {"graph": GRAPH, "top": 3})
+        errs = [await s.call_tool("blast_radius", {"graph": GRAPH, "service": "carts"}),
+                await s.call_tool("blast_radius", {"graph": GRAPH, "service": "cart", "max_depth": 50}),
+                await s.call_tool("criticality", {"graph": GRAPH, "kind": "db"}),
+                await s.call_tool("failure_paths", {"graph": "bad name!", "service": "cart"})]
+        return blast, paths, crit, errs
+
+    blast, paths, crit, errs = session(steps)
+    b = blast.structured_content
+    assert {a["service"] for a in b["affected"]} == {"front-end", "frontend"}
+    assert all(h["evidence"] for a in b["affected"] for h in a["hops"]) and b["cited_connections"]
+    p = paths.structured_content
+    assert {tuple(x["path"]) for x in p["paths"]} == {("front-end", "cart"), ("frontend", "cart")}
+    c = crit.structured_content
+    assert c["ranked"][0]["service"] == "cart" and c["ranked"][0]["dependents"] == 2
+    assert [e.is_error for e in errs] == [True] * 4
+    msgs = [e.content[0].text for e in errs]
+    assert "did you mean ['cart']" in msgs[0] and "max_depth" in msgs[1] and "kind must be" in msgs[2] and "graph name" in msgs[3]
