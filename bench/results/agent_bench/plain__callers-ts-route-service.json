@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 11241,
+  "stop_reason": "end_turn",
+  "session_id": "9192f997-7bf2-4fc0-8f97-46d974fd089f",
+  "total_cost_usd": 0.0378948,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 5669,
+    "cache_read_input_tokens": 15853,
+    "output_tokens": 984,
+    "output_tokens_details": {
+      "thinking_tokens": 77
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 5669,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 825,
+        "cache_read_input_tokens": 10282,
+        "cache_creation_input_tokens": 958,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 958
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1003,
+      "cacheReadInputTokens": 15853,
+      "cacheCreationInputTokens": 7104,
+      "webSearchRequests": 0,
+      "costUSD": 0.0378948,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 77,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Five services call ts-route-service directly. Each one builds an HTTP URL to `ts-route-service:11178` in its main code. I searched the `src` folders of all services for `route-service`. The test-file matches are left out, and `ts-route-service`'s own `application.yml` is its own name, not a call.\n\n```json\n{\"services\": [\"ts-admin-route-service\", \"ts-travel-service\", \"ts-travel2-service\", \"ts-basic-service\", \"ts-route-plan-service\"], \"evidence\": [\n{\"caller\": \"ts-admin-route-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-admin-route-service/src/main/java/adminroute/service/AdminRouteServiceImpl.java\", \"line\": 29, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 436, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 370, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 155, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-route-plan-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-route-plan-service/src/main/java/plan/service/RoutePlanServiceImpl.java\", \"line\": 158, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + fromStationId + \\\"/\\\" + toStationId,\"}\n]}\n```",
+  "ttft_ms": 2536,
+  "type": "result",
+  "duration_ms": 9301,
+  "uuid": "5e7384e3-1a21-4956-8535-f00077981c20",
+  "ttft_stream_ms": 1519,
+  "time_to_request_ms": 148,
+  "time_to_request_phases_ms": {
+    "other": 5,
+    "system_prompt": 8,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 4,
+    "input_hooks": 1,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 1,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 114,
+    "tool_schema_build": 5,
+    "message_normalization": 1,
+    "client_creation": 1,
+    "request_build": 3
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 1,
+  "time_to_request_cpu_ms": 60,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1519,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 10.4,
+  "_question": {
+    "id": "callers-ts-route-service",
+    "kind": "callers",
+    "target": "ts-route-service",
+    "text": "Which services call ts-route-service directly?"
+  },
+  "_setup": "plain"
+}

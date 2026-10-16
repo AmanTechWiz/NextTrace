@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 13575,
+  "stop_reason": "end_turn",
+  "session_id": "7ded6525-71f4-4639-ba64-81e33fcf0b9b",
+  "total_cost_usd": 0.0482989,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 6900,
+    "cache_read_input_tokens": 15854,
+    "output_tokens": 1532,
+    "output_tokens_details": {
+      "thinking_tokens": 165
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 6900,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1375,
+        "cache_read_input_tokens": 10283,
+        "cache_creation_input_tokens": 2188,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 2188
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1551,
+      "cacheReadInputTokens": 15854,
+      "cacheCreationInputTokens": 8335,
+      "webSearchRequests": 0,
+      "costUSD": 0.0482989,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 165,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Ten services call ts-order-service directly. Each one hard-codes the `http://ts-order-service:12031/...` URL in its main source. I left out test files and the service's own `application.yml`.\n\n```json\n{\"services\": [\"ts-admin-order-service\", \"ts-rebook-service\", \"ts-preserve-service\", \"ts-travel-service\", \"ts-security-service\", \"ts-execute-service\", \"ts-inside-payment-service\", \"ts-seat-service\", \"ts-cancel-service\"], \"evidence\": [\n{\"caller\": \"ts-admin-order-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-admin-order-service/src/main/java/adminorder/service/AdminOrderServiceImpl.java\", \"line\": 36, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 297, \"quote\": \"requestUrl = \\\"http://ts-order-service:12031/api/v1/orderservice/order\\\";\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 368, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 318, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/\\\" + departureTime + \\\"/\\\" + trip.getTripId().toString(),\"},\n{\"caller\": \"ts-security-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-security-service/src/main/java/security/service/SecurityServiceImpl.java\", \"line\": 119, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/security/\\\" + checkDate + \\\"/\\\" + accountId,\"},\n{\"caller\": \"ts-execute-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-execute-service/src/main/java/execute/serivce/ExecuteServiceImpl.java\", \"line\": 130, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/status/\\\" + orderId + \\\"/\\\" + status,\"},\n{\"caller\": \"ts-inside-payment-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-inside-payment-service/src/main/java/inside_payment/service/InsidePaymentServiceImpl.java\", \"line\": 45, \"quote\": \"requestOrderURL =  \\\"http://ts-order-service:12031/api/v1/orderservice/order/\\\" + info.getOrderId();\"},\n{\"caller\": \"ts-seat-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-seat-service/src/main/java/seat/service/SeatServiceImpl.java\", \"line\": 60, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/tickets\\\",\"},\n{\"caller\": \"ts-cancel-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-cancel-service/src/main/java/cancel/service/CancelServiceImpl.java\", \"line\": 232, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"}\n]}\n```",
+  "ttft_ms": 3637,
+  "type": "result",
+  "duration_ms": 12490,
+  "uuid": "6e8386d5-101c-4b2b-885a-e2dc411e545c",
+  "ttft_stream_ms": 2835,
+  "time_to_request_ms": 88,
+  "time_to_request_phases_ms": {
+    "other": 5,
+    "system_prompt": 10,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 3,
+    "input_hooks": 1,
+    "transcript_persist": 1,
+    "tool_pool_refresh": 0,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 1,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 56,
+    "tool_schema_build": 4,
+    "message_normalization": 0,
+    "client_creation": 2,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 1,
+  "time_to_request_cpu_ms": 52,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 5,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 2836,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 13.7,
+  "_question": {
+    "id": "callers-ts-order-service",
+    "kind": "callers",
+    "target": "ts-order-service",
+    "text": "Which services call ts-order-service directly?"
+  },
+  "_setup": "plain"
+}

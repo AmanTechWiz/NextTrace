@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 14737,
+  "stop_reason": "end_turn",
+  "session_id": "3a18deb2-2d02-40f9-b763-1afd66b947c3",
+  "total_cost_usd": 0.0424182,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 5940,
+    "cache_read_input_tokens": 16247,
+    "output_tokens": 1304,
+    "output_tokens_details": {
+      "thinking_tokens": 78
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 5940,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1087,
+        "cache_read_input_tokens": 10676,
+        "cache_creation_input_tokens": 835,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 835
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1326,
+      "cacheReadInputTokens": 16247,
+      "cacheCreationInputTokens": 7443,
+      "webSearchRequests": 0,
+      "costUSD": 0.0424182,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 78,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Seven services call ts-seat-service directly. Each one hard-codes the `http://ts-seat-service:18898` URL in its main source. I searched only the `.java` files, so a caller configured through another file type (properties or YAML, for example) would not show up. I did not use the NextTrace graph, and the lines below come straight from a grep of the code.\n\nThe services are:\n- ts-travel2-service\n- ts-preserve-service\n- ts-travel-plan-service\n- ts-travel-service\n- ts-rebook-service\n- ts-preserve-other-service\n\nThat is six names. Counting again, the list is six, not seven, and the JSON below matches it.\n\n```json\n{\"services\": [\"ts-travel2-service\", \"ts-preserve-service\", \"ts-travel-plan-service\", \"ts-travel-service\", \"ts-rebook-service\", \"ts-preserve-other-service\"], \"evidence\": [\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 400, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 256, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 217, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 467, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 228, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-seat-service\", \"file\": \"train-ticket/ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 259, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"}\n]}\n```",
+  "ttft_ms": 3132,
+  "type": "result",
+  "duration_ms": 13190,
+  "uuid": "53f9a01a-7385-4211-9108-8234236370b0",
+  "ttft_stream_ms": 2094,
+  "time_to_request_ms": 27,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 9,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 3,
+    "input_hooks": 2,
+    "transcript_persist": 1,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 1,
+    "message_normalization": 1,
+    "client_creation": 0,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 40,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 2094,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 14.6,
+  "_question": {
+    "id": "callers-ts-seat-service",
+    "kind": "callers",
+    "target": "ts-seat-service",
+    "text": "Which services call ts-seat-service directly?"
+  },
+  "_setup": "nexttrace"
+}

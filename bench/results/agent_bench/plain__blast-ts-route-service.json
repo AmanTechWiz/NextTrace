@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 28368,
+  "stop_reason": "end_turn",
+  "session_id": "fd52a0a7-bb6c-4a53-949a-1ebeba86c6bb",
+  "total_cost_usd": 0.0945955,
+  "usage": {
+    "input_tokens": 10,
+    "cache_creation_input_tokens": 10866,
+    "cache_read_input_tokens": 55835,
+    "output_tokens": 4168,
+    "output_tokens_details": {
+      "thinking_tokens": 863
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 10866,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 2692,
+        "cache_read_input_tokens": 15069,
+        "cache_creation_input_tokens": 1368,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1368
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 4190,
+      "cacheReadInputTokens": 55835,
+      "cacheCreationInputTokens": 12314,
+      "webSearchRequests": 0,
+      "costUSD": 0.0945955,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 863,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 7,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "If ts-route-service fails, 14 services are affected: 5 call it directly and 9 reach it through other services.\n\n**Direct callers of ts-route-service**\n- ts-admin-route-service\n- ts-basic-service\n- ts-travel-service\n- ts-travel2-service\n- ts-route-plan-service\n\n**Indirect, through a service that calls ts-route-service**\n- ts-ticketinfo-service calls ts-basic-service.\n- ts-seat-service calls ts-travel-service.\n- ts-food-service calls ts-travel-service.\n- ts-preserve-service calls ts-travel-service.\n- ts-preserve-other-service calls ts-travel2-service.\n- ts-rebook-service calls ts-travel-service.\n- ts-travel-plan-service calls ts-route-plan-service.\n- ts-admin-travel-service calls ts-travel-service.\n- ts-travel-service and ts-travel2-service also call ts-ticketinfo-service and ts-seat-service, so those two sit on a cycle with them.\n\nI found no code in the other services that calls ts-preserve, ts-preserve-other, ts-rebook, ts-travel-plan, ts-admin-travel or ts-admin-route, so the chain ends there. I searched only the Java sources and the `application.yml`, properties, XML, Python, Go and JS files under each service's `src/main`. A caller outside those files would not show up.\n\n```json\n{\"services\": [\"ts-admin-route-service\", \"ts-basic-service\", \"ts-travel-service\", \"ts-travel2-service\", \"ts-route-plan-service\", \"ts-ticketinfo-service\", \"ts-seat-service\", \"ts-food-service\", \"ts-preserve-service\", \"ts-preserve-other-service\", \"ts-rebook-service\", \"ts-travel-plan-service\", \"ts-admin-travel-service\"], \"evidence\": [\n{\"caller\": \"ts-admin-route-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-admin-route-service/src/main/java/adminroute/service/AdminRouteServiceImpl.java\", \"line\": 29, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes\\\",\"},\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 155, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 436, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 370, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + routeId,\"},\n{\"caller\": \"ts-route-plan-service\", \"callee\": \"ts-route-service\", \"file\": \"ts-route-plan-service/src/main/java/plan/service/RoutePlanServiceImpl.java\", \"line\": 158, \"quote\": \"\\\"http://ts-route-service:11178/api/v1/routeservice/routes/\\\" + fromStationId + \\\"/\\\" + toStationId,\"},\n{\"caller\": \"ts-ticketinfo-service\", \"callee\": \"ts-basic-service\", \"file\": \"ts-ticketinfo-service/src/main/java/ticketinfo/service/TicketInfoServiceImpl.java\", \"line\": 26, \"quote\": \"\\\"http://ts-basic-service:15680/api/v1/basicservice/basic/travel\\\",\"},\n{\"caller\": \"ts-seat-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-seat-service/src/main/java/seat/service/SeatServiceImpl.java\", \"line\": 49, \"quote\": \"\\\"http://ts-travel-service:12346/api/v1/travelservice/routes/\\\" + trainNumber,\"},\n{\"caller\": \"ts-food-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-food-service/src/main/java/foodsearch/service/FoodServiceImpl.java\", \"line\": 232, \"quote\": \"\\\"http://ts-travel-service:12346/api/v1/travelservice/routes/\\\" + tripId,\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 339, \"quote\": \"\\\"http://ts-travel-service:12346/api/v1/travelservice/trip_detail\\\",\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-travel2-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 345, \"quote\": \"\\\"http://ts-travel2-service:16346/api/v1/travel2service/trip_detail\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 275, \"quote\": \"requestUrl = \\\"http://ts-travel-service:12346/api/v1/travelservice/trip_detail\\\";\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-route-plan-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 229, \"quote\": \"\\\"http://ts-route-plan-service:14578/api/v1/routeplanservice/routePlan/cheapestRoute\\\",\"},\n{\"caller\": \"ts-admin-travel-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-admin-travel-service/src/main/java/admintravel/service/AdminTravelServiceImpl.java\", \"line\": 37, \"quote\": \"\\\"http://ts-travel-service:12346/api/v1/travelservice/admin_trip\\\",\"}\n]}\n```",
+  "ttft_ms": 1833,
+  "type": "result",
+  "duration_ms": 27119,
+  "uuid": "ca632bdb-0333-406e-90d4-edab90c9326d",
+  "ttft_stream_ms": 1180,
+  "time_to_request_ms": 31,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 12,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 4,
+    "input_hooks": 1,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 0,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 1,
+    "message_normalization": 1,
+    "client_creation": 0,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 48,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1180,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 28.3,
+  "_question": {
+    "id": "blast-ts-route-service",
+    "kind": "blast",
+    "target": "ts-route-service",
+    "text": "If ts-route-service fails, which services break, directly or through other services that depend on it?"
+  },
+  "_setup": "plain"
+}

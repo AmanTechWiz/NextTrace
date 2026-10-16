@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 11373,
+  "stop_reason": "end_turn",
+  "session_id": "8c9447ff-f2ea-40dc-a90f-135d36d8c11c",
+  "total_cost_usd": 0.054113999999999995,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 8628,
+    "cache_read_input_tokens": 15860,
+    "output_tokens": 1416,
+    "output_tokens_details": {
+      "thinking_tokens": 114
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 8628,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1215,
+        "cache_read_input_tokens": 10289,
+        "cache_creation_input_tokens": 3910,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 3910
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1440,
+      "cacheReadInputTokens": 15860,
+      "cacheCreationInputTokens": 10068,
+      "webSearchRequests": 0,
+      "costUSD": 0.054113999999999995,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 114,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Five services call ts-ticketinfo-service directly. Each one hard-codes its URL (`http://ts-ticketinfo-service:15681/...`) in its service implementation. I searched every `ts-*/src` tree for \"ticketinfo\" and found no other callers. The only other hits were ts-ticketinfo-service's own code and unrelated `LeftTicketInfo` classes.\n\n- **ts-travel-plan-service:** `TravelPlanServiceImpl.java` line 288 calls the station-name endpoint.\n- **ts-travel2-service:** `Travel2ServiceImpl.java` line 229 (travel query) and line 356 (station-name endpoint). I list line 229 as its evidence.\n- **ts-travel-service:** `TravelServiceImpl.java` line 308 (travel query) and line 422 (station-name endpoint). I list line 308 as its evidence.\n- **ts-preserve-service:** `PreserveServiceImpl.java` line 117 calls the travel query endpoint.\n- **ts-preserve-other-service:** `PreserveOtherServiceImpl.java` line 124 calls the travel query endpoint.\n\n```json\n{\"services\": [\"ts-travel-plan-service\", \"ts-travel2-service\", \"ts-travel-service\", \"ts-preserve-service\", \"ts-preserve-other-service\"], \"evidence\": [\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 288, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo/\\\" + stationName,\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 229, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 308, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 117, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 124, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"}\n]}\n```",
+  "ttft_ms": 2405,
+  "type": "result",
+  "duration_ms": 9654,
+  "uuid": "c02ba224-bb3a-46f4-a8de-5b4693ec1beb",
+  "ttft_stream_ms": 1391,
+  "time_to_request_ms": 32,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 11,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 4,
+    "input_hooks": 1,
+    "transcript_persist": 3,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 1,
+    "model_config_wait": 0,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 1,
+    "tool_schema_build": 1,
+    "message_normalization": 1,
+    "client_creation": 0,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 49,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 8,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1391,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 11.1,
+  "_question": {
+    "id": "callers-ts-ticketinfo-service",
+    "kind": "callers",
+    "target": "ts-ticketinfo-service",
+    "text": "Which services call ts-ticketinfo-service directly?"
+  },
+  "_setup": "plain"
+}

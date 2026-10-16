@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 11366,
+  "stop_reason": "end_turn",
+  "session_id": "8ac3255b-3938-4560-a06d-f195a2e79ad5",
+  "total_cost_usd": 0.0461419,
+  "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 6691,
+    "cache_read_input_tokens": 27704,
+    "output_tokens": 1258,
+    "output_tokens_details": {
+      "thinking_tokens": 24
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 6691,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 849,
+        "cache_read_input_tokens": 11453,
+        "cache_creation_input_tokens": 809,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 809
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 10,
+      "outputTokens": 1282,
+      "cacheReadInputTokens": 27704,
+      "cacheCreationInputTokens": 8198,
+      "webSearchRequests": 0,
+      "costUSD": 0.0461419,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 24,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 3,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Five services call ts-ticketinfo-service directly. I found them with a code search for the service's hostname and did not use the NextTrace graph. Each service hard-codes the URL in a Java service class.\n\nThe other matches were configs and deployment files, not service-to-service calls. The nginx.conf in ts-ui-dashboard also mentions the service, but that is the UI gateway, not a service caller, so I left it out.\n\n```json\n{\"services\": [\"ts-travel2-service\", \"ts-travel-service\", \"ts-preserve-service\", \"ts-preserve-other-service\", \"ts-travel-plan-service\"], \"evidence\": [\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 229, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 308, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 117, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 124, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo\\\",\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-ticketinfo-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 288, \"quote\": \"\\\"http://ts-ticketinfo-service:15681/api/v1/ticketinfoservice/ticketinfo/\\\" + stationName,\"}\n]}\n```",
+  "ttft_ms": 2491,
+  "type": "result",
+  "duration_ms": 10208,
+  "uuid": "ad42ac6b-af04-4b0b-bb3e-cbac900711d9",
+  "ttft_stream_ms": 1372,
+  "time_to_request_ms": 25,
+  "time_to_request_phases_ms": {
+    "other": 3,
+    "system_prompt": 8,
+    "resume_other": 0,
+    "process_user_input": 0,
+    "input_attachments": 4,
+    "input_hooks": 0,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 2,
+    "message_normalization": 0,
+    "client_creation": 0,
+    "request_build": 3
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 41,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 5,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1372,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 11.6,
+  "_question": {
+    "id": "callers-ts-ticketinfo-service",
+    "kind": "callers",
+    "target": "ts-ticketinfo-service",
+    "text": "Which services call ts-ticketinfo-service directly?"
+  },
+  "_setup": "nexttrace"
+}

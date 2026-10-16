@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 14578,
+  "stop_reason": "end_turn",
+  "session_id": "e33afa2c-9c4e-487a-8eba-a74d0b41b9c5",
+  "total_cost_usd": 0.053903099999999995,
+  "usage": {
+    "input_tokens": 6,
+    "cache_creation_input_tokens": 7395,
+    "cache_read_input_tokens": 27981,
+    "output_tokens": 1754,
+    "output_tokens_details": {
+      "thinking_tokens": 177
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 7395,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1096,
+        "cache_read_input_tokens": 11732,
+        "cache_creation_input_tokens": 1234,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1234
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 10,
+      "outputTokens": 1775,
+      "cacheReadInputTokens": 27981,
+      "cacheCreationInputTokens": 8897,
+      "webSearchRequests": 0,
+      "costUSD": 0.053903099999999995,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 177,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 4,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Four services call ts-train-service directly. Each one builds an HTTP URL to `ts-train-service:14567` in its main source code. I read these from a text search of the code and did not run the NextTrace graph tools.\n\n- **ts-admin-basic-info-service** has two calls, at line 28 (the trains collection URL) and line 188 (a trains URL with an id appended).\n- **ts-travel2-service** calls it at line 344, with a trainTypeId appended.\n- **ts-travel-service** calls it at line 410, with a trainTypeId appended.\n- **ts-basic-service** calls it at line 142, with a trainTypeId appended.\n\nTest files for ts-admin-basic-info-service and ts-basic-service also mention the URL, but I left them out because they aren't real callers.\n\n`ts-ui-dashboard/nginx.conf:74` also proxies to `http://ts-train-service:14567`. That is the front-end gateway rather than a service-to-service call, so I didn't list it.\n\n```json\n{\"services\": [\"ts-admin-basic-info-service\", \"ts-travel2-service\", \"ts-travel-service\", \"ts-basic-service\"], \"evidence\": [\n{\"caller\": \"ts-admin-basic-info-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java\", \"line\": 28, \"quote\": \"String trains = \\\"http://ts-train-service:14567/api/v1/trainservice/trains\\\";\"},\n{\"caller\": \"ts-admin-basic-info-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java\", \"line\": 188, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/\\\" + id,\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 344, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/\\\" + trainTypeId,\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 410, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/\\\" + trainTypeId,\"},\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 142, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/\\\" + trainTypeId,\"}\n]}\n```",
+  "ttft_ms": 1486,
+  "type": "result",
+  "duration_ms": 13064,
+  "uuid": "fad4483e-006d-477c-b810-c9e1e599a06c",
+  "ttft_stream_ms": 1136,
+  "time_to_request_ms": 41,
+  "time_to_request_phases_ms": {
+    "other": 5,
+    "system_prompt": 10,
+    "resume_other": 0,
+    "process_user_input": 2,
+    "input_attachments": 6,
+    "input_hooks": 2,
+    "transcript_persist": 5,
+    "tool_pool_refresh": 2,
+    "init_message": 2,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 3,
+    "message_normalization": 0,
+    "client_creation": 0,
+    "request_build": 3
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 53,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 3,
+    "cpu_ms": 8,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1137,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 15.2,
+  "_question": {
+    "id": "callers-ts-train-service",
+    "kind": "callers",
+    "target": "ts-train-service",
+    "text": "Which services call ts-train-service directly?"
+  },
+  "_setup": "nexttrace"
+}

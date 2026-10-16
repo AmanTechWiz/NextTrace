@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 34318,
+  "stop_reason": "end_turn",
+  "session_id": "86bfec41-c41b-487c-9f03-6631948bb84b",
+  "total_cost_usd": 0.07549919999999999,
+  "usage": {
+    "input_tokens": 10,
+    "cache_creation_input_tokens": 9968,
+    "cache_read_input_tokens": 60842,
+    "output_tokens": 2557,
+    "output_tokens_details": {
+      "thinking_tokens": 82
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 9968,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1802,
+        "cache_read_input_tokens": 15320,
+        "cache_creation_input_tokens": 219,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 219
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 14,
+      "outputTokens": 2576,
+      "cacheReadInputTokens": 60842,
+      "cacheCreationInputTokens": 11470,
+      "webSearchRequests": 0,
+      "costUSD": 0.07549919999999999,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 82,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 5,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Eleven services call ts-order-service directly. Each one hard-codes the URL `http://ts-order-service:12031/...` in its main source. I found them by searching the code for that hostname, and I did not use the NextTrace graph. I left out test files, docs, and deployment manifests. I checked the exact line in `ts-voucher-service`; the other lines come from the search output.\n\n- **ts-inside-payment-service:** `InsidePaymentServiceImpl.java:45`, which builds the order URL from the order ID. It also calls the order status endpoint at line 328.\n- **ts-seat-service:** `SeatServiceImpl.java:60`, the order tickets endpoint. Line 201 repeats the call.\n- **ts-rebook-service:** `RebookServiceImpl.java:297`. Lines 315, 333 and 353 are further calls.\n- **ts-preserve-service:** `PreserveServiceImpl.java:368`.\n- **ts-cancel-service:** `CancelServiceImpl.java:232`. Line 296 is another call.\n- **ts-admin-order-service:** `AdminOrderServiceImpl.java:36`. Lines 79, 110 and 138 are further calls.\n- **ts-travel-service:** `TravelServiceImpl.java:318`.\n- **ts-execute-service:** `ExecuteServiceImpl.java:130`. Line 155 is another call.\n- **ts-security-service:** `SecurityServiceImpl.java:119`.\n- **ts-voucher-service:** `server.py:55`. This is the `else` branch. The branch above it, at line 53, goes to `ts-order-other-service`, which is a different service.\n\n```json\n{\"services\": [\"ts-inside-payment-service\", \"ts-seat-service\", \"ts-rebook-service\", \"ts-preserve-service\", \"ts-cancel-service\", \"ts-admin-order-service\", \"ts-travel-service\", \"ts-execute-service\", \"ts-security-service\", \"ts-voucher-service\"], \"evidence\": [\n{\"caller\": \"ts-inside-payment-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-inside-payment-service/src/main/java/inside_payment/service/InsidePaymentServiceImpl.java\", \"line\": 45, \"quote\": \"requestOrderURL =  \\\"http://ts-order-service:12031/api/v1/orderservice/order/\\\" + info.getOrderId();\"},\n{\"caller\": \"ts-seat-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-seat-service/src/main/java/seat/service/SeatServiceImpl.java\", \"line\": 60, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/tickets\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 297, \"quote\": \"requestUrl = \\\"http://ts-order-service:12031/api/v1/orderservice/order\\\";\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 368, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"},\n{\"caller\": \"ts-cancel-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-cancel-service/src/main/java/cancel/service/CancelServiceImpl.java\", \"line\": 232, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"},\n{\"caller\": \"ts-admin-order-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-admin-order-service/src/main/java/adminorder/service/AdminOrderServiceImpl.java\", \"line\": 36, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 318, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/\\\" + departureTime + \\\"/\\\" + trip.getTripId().toString(),\"},\n{\"caller\": \"ts-execute-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-execute-service/src/main/java/execute/serivce/ExecuteServiceImpl.java\", \"line\": 130, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/status/\\\" + orderId + \\\"/\\\" + status,\"},\n{\"caller\": \"ts-security-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-security-service/src/main/java/security/service/SecurityServiceImpl.java\", \"line\": 119, \"quote\": \"\\\"http://ts-order-service:12031/api/v1/orderservice/order/security/\\\" + checkDate + \\\"/\\\" + accountId,\"},\n{\"caller\": \"ts-voucher-service\", \"callee\": \"ts-order-service\", \"file\": \"ts-voucher-service/server.py\", \"line\": 55, \"quote\": \"url='http://ts-order-service:12031/api/v1/orderservice/order/'+orderId\"}\n]}\n```",
+  "ttft_ms": 3559,
+  "type": "result",
+  "duration_ms": 32630,
+  "uuid": "f34cc0d1-edc3-4889-be3b-859d2086ccd4",
+  "ttft_stream_ms": 3268,
+  "time_to_request_ms": 25,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 7,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 3,
+    "input_hooks": 1,
+    "transcript_persist": 1,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 1,
+    "tool_schema_build": 1,
+    "message_normalization": 1,
+    "client_creation": 0,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 39,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 3268,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 34.5,
+  "_question": {
+    "id": "callers-ts-order-service",
+    "kind": "callers",
+    "target": "ts-order-service",
+    "text": "Which services call ts-order-service directly?"
+  },
+  "_setup": "nexttrace"
+}

@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 14421,
+  "stop_reason": "end_turn",
+  "session_id": "32898ddd-665d-481b-8451-ac56ea56e620",
+  "total_cost_usd": 0.0516765,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 7327,
+    "cache_read_input_tokens": 15850,
+    "output_tokens": 1699,
+    "output_tokens_details": {
+      "thinking_tokens": 124
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 7327,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1503,
+        "cache_read_input_tokens": 10279,
+        "cache_creation_input_tokens": 2619,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 2619
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1718,
+      "cacheReadInputTokens": 15850,
+      "cacheCreationInputTokens": 8762,
+      "webSearchRequests": 0,
+      "costUSD": 0.0516765,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 124,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Eleven services call ts-station-service directly. Each one hardcodes the URL `http://ts-station-service:12345/api/v1/stationservice/...` in its main source. I found them by searching the whole repo for the service name. I excluded test files, deployment manifests and docs, because none of those are callers.\n\n```json\n{\"services\": [\"ts-preserve-service\", \"ts-preserve-other-service\", \"ts-route-plan-service\", \"ts-travel-plan-service\", \"ts-rebook-service\", \"ts-order-other-service\", \"ts-order-service\", \"ts-food-service\", \"ts-admin-basic-info-service\", \"ts-basic-service\"], \"evidence\": [\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 311, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\" + stationName,\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 318, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\" + stationName,\"},\n{\"caller\": \"ts-route-plan-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-route-plan-service/src/main/java/plan/service/RoutePlanServiceImpl.java\", \"line\": 278, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\" + stationName,\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 300, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/namelist\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 373, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/name/\\\" + stationId,\"},\n{\"caller\": \"ts-order-other-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-order-other-service/src/main/java/other/service/OrderOtherServiceImpl.java\", \"line\": 204, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/namelist\\\",\"},\n{\"caller\": \"ts-order-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-order-service/src/main/java/order/service/OrderServiceImpl.java\", \"line\": 188, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/namelist\\\",\"},\n{\"caller\": \"ts-food-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-food-service/src/main/java/foodsearch/service/FoodServiceImpl.java\", \"line\": 247, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\" + startStation,\"},\n{\"caller\": \"ts-admin-basic-info-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java\", \"line\": 27, \"quote\": \"String stations = \\\"http://ts-station-service:12345/api/v1/stationservice/stations\\\";\"},\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 113, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\" + stationName,\"}\n]}\n```",
+  "ttft_ms": 3328,
+  "type": "result",
+  "duration_ms": 13068,
+  "uuid": "3d16435c-b500-48e3-8a52-e843f7f4f4ee",
+  "ttft_stream_ms": 2344,
+  "time_to_request_ms": 72,
+  "time_to_request_phases_ms": {
+    "other": 6,
+    "system_prompt": 7,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 4,
+    "input_hooks": 0,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 2,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 40,
+    "tool_schema_build": 4,
+    "message_normalization": 0,
+    "client_creation": 1,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 1,
+  "time_to_request_cpu_ms": 57,
+  "time_to_request_major_faults": 10,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 2344,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 14.4,
+  "_question": {
+    "id": "callers-ts-station-service",
+    "kind": "callers",
+    "target": "ts-station-service",
+    "text": "Which services call ts-station-service directly?"
+  },
+  "_setup": "plain"
+}

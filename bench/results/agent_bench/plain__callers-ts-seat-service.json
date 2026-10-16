@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 18016,
+  "stop_reason": "end_turn",
+  "session_id": "84e153ac-bb06-4e00-8124-770c82c4459d",
+  "total_cost_usd": 0.0459312,
+  "usage": {
+    "input_tokens": 4,
+    "cache_creation_input_tokens": 6725,
+    "cache_read_input_tokens": 15852,
+    "output_tokens": 1364,
+    "output_tokens_details": {
+      "thinking_tokens": 69
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 6725,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1163,
+        "cache_read_input_tokens": 10281,
+        "cache_creation_input_tokens": 2015,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 2015
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 8,
+      "outputTokens": 1384,
+      "cacheReadInputTokens": 15852,
+      "cacheCreationInputTokens": 8161,
+      "webSearchRequests": 0,
+      "costUSD": 0.0459312,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 69,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 2,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Six services call ts-seat-service directly. Each one hard-codes the `http://ts-seat-service:18898` address in its main source. I left out the test files, which only mock the same URL, and the deployment manifests, which only define the service.\n\n- **ts-travel-plan-service:** `TravelPlanServiceImpl.java:217`, the `left_tickets` endpoint.\n- **ts-travel-service:** `TravelServiceImpl.java:467`, the `left_tickets` endpoint.\n- **ts-travel2-service:** `Travel2ServiceImpl.java:400`, the `left_tickets` endpoint.\n- **ts-rebook-service:** `RebookServiceImpl.java:228`, the `seats` endpoint.\n- **ts-preserve-service:** `PreserveServiceImpl.java:256`, the `seats` endpoint.\n- **ts-preserve-other-service:** `PreserveOtherServiceImpl.java:259`, the `seats` endpoint.\n\n```json\n{\"services\": [\"ts-travel-plan-service\", \"ts-travel-service\", \"ts-travel2-service\", \"ts-rebook-service\", \"ts-preserve-service\", \"ts-preserve-other-service\"], \"evidence\": [\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 217, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 467, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/Travel2ServiceImpl.java\", \"line\": 400, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\",\"},\n{\"caller\": \"ts-rebook-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-rebook-service/src/main/java/rebook/service/RebookServiceImpl.java\", \"line\": 228, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 256, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 259, \"quote\": \"\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\",\"}\n]}\n```",
+  "ttft_ms": 3489,
+  "type": "result",
+  "duration_ms": 16553,
+  "uuid": "ffa7d8f7-543f-4c97-ae29-5a1d3c09b1ee",
+  "ttft_stream_ms": 2517,
+  "time_to_request_ms": 76,
+  "time_to_request_phases_ms": {
+    "other": 5,
+    "system_prompt": 10,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 4,
+    "input_hooks": 1,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 41,
+    "tool_schema_build": 4,
+    "message_normalization": 1,
+    "client_creation": 1,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 1,
+  "time_to_request_cpu_ms": 58,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 2518,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 17.6,
+  "_question": {
+    "id": "callers-ts-seat-service",
+    "kind": "callers",
+    "target": "ts-seat-service",
+    "text": "Which services call ts-seat-service directly?"
+  },
+  "_setup": "plain"
+}
