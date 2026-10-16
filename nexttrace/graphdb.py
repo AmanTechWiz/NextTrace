@@ -1,4 +1,5 @@
 """Small FalkorDB helpers shared by the mapper and the agents."""
+import os
 import time
 
 
@@ -17,3 +18,13 @@ def ensure_unique(graph, label: str, prop: str, wait_s: float = 5.0) -> None:
             return
         time.sleep(0.05)
     raise RuntimeError(f"unique constraint on {label}.{prop} not operational: {graph.list_constraints()}")
+
+
+def connect(host=None, port=None):
+    """FalkorDB client from FALKORDB_HOST / _PORT / _USERNAME / _PASSWORD / _TLS (FalkorDB Cloud needs the last three).
+    Same variable names as the official FalkorDB MCP server, so one set of settings works for both."""
+    from falkordb import FalkorDB
+    env = os.environ.get
+    return FalkorDB(host=host or env("FALKORDB_HOST", "localhost"), port=int(port or env("FALKORDB_PORT", "6379")),
+                    username=env("FALKORDB_USERNAME") or None, password=env("FALKORDB_PASSWORD") or None,
+                    ssl=env("FALKORDB_TLS", "").lower() in ("1", "true", "yes"))

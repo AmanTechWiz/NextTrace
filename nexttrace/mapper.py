@@ -601,11 +601,11 @@ def known_services(graph, repo_name) -> set:
     return {r[0] for r in rows}
 
 
-def map_repo(path, graph_name=None, traces=(), host="localhost", port=6379) -> dict:
+def map_repo(path, graph_name=None, traces=(), host=None, port=None) -> dict:
     """Scan a repo and write its service map into FalkorDB graph `graph_name` (default: the repo folder name)."""
-    from falkordb import FalkorDB
+    from nexttrace.graphdb import connect
     path = Path(path).resolve()
-    graph = FalkorDB(host=host, port=port).select_graph(graph_name or path.name)
+    graph = connect(host, port).select_graph(graph_name or path.name)
     m = scan(path, known=known_services(graph, path.name), folders=agent_folders(graph, path.name))
     unknown = Counter()
     if traces:

@@ -51,7 +51,8 @@ def test_tools_are_listed_with_read_only_hints():
     assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True,
                      "find_gaps": True, "add_connection": False, "export_map": False,
                      "add_service": False, "merge_services": False, "set_service_folder": False,
-                     "remove_service": False, "remove_connection": False}
+                     "remove_service": False, "remove_connection": False, "list_graphs": True,
+                     "get_graph_schema": True, "query_graph_readonly": True}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -453,3 +454,95 @@ def test_find_gaps_on_a_config_only_repo(tmp_path, clean):
 
     g = session(steps)
     assert not g.is_error and g.structured_content["isolated"] == [] and g.structured_content["services"] == 0
+
+
+def test_read_only_query_params_algorithms_and_nodes(tmp_path, clean):
+    repo = make(tmp_path / "shop", {**MESSY_REPO})
+    q = lambda query, **kw: {"graph": GRAPH, "query": query, **kw}
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        rows = await s.call_tool("query_graph_readonly", q("MATCH (a:Service)-[c:CALLS]->(b:Service) WHERE b.name = $n "
+                                                           "RETURN a.name, c.confidence ORDER BY a.name", params={"n": "cart"}))
+        node = await s.call_tool("query_graph_readonly", q("MATCH (s:Service {name: 'cart'}) RETURN s"))
+        path = await s.call_tool("query_graph_readonly", q("MATCH p = (a:Service {name:'front-end'})-[:CALLS*1..2]->(b) RETURN p LIMIT 1"))
+        algo = await s.call_tool("query_graph_readonly", q("CALL algo.pageRank('Service','CALLS') YIELD node, score "
+                                                           "RETURN node.name, score ORDER BY score DESC LIMIT 1"))
+        capped = await s.call_tool("query_graph_readonly", q("UNWIND range(1, 50) AS i RETURN i", max_rows=10))
+        bad = [await s.call_tool("query_graph_readonly", q(x)) for x in (
+            "CREATE (:Hack {x: 1})", "MATCH (n) DETACH DELETE n", "MATCH (s:Service) SET s.owner = 'x' RETURN s",
+            "MATCH (n RETURN n", "CALL db.idx.fulltext.createNodeIndex('Service', 'name')")]
+        still = await s.call_tool("query_graph_readonly", q("MATCH (s:Service) RETURN count(s)"))
+        return rows, node, path, algo, capped, bad, still
+
+    rows, node, path, algo, capped, bad, still = session(steps)
+    assert rows.structured_content["columns"] == ["a.name", "c.confidence"] and rows.structured_content["row_count"] >= 1
+    n = node.structured_content["rows"][0][0]
+    assert n["labels"] == ["Service"] and n["properties"]["name"] == "cart"            # nodes come back as plain data
+    assert path.structured_content["rows"][0][0]["path"][0]["properties"]["name"] == "front-end"
+    assert len(algo.structured_content["rows"][0]) == 2 and algo.structured_content["rows"][0][1] > 0
+    assert capped.structured_content["row_count"] == 50 and len(capped.structured_content["rows"]) == 10
+    assert capped.structured_content["truncated"] is True
+    assert all(b.is_error and "FalkorDB rejected the query" in b.content[0].text for b in bad), [b.content[0].text for b in bad]
+    assert still.structured_content["rows"] == [[4]]                                    # nothing was written or deleted
+
+
+def test_query_timeout_is_enforced(tmp_path, clean):
+    g = FalkorDB().select_graph(GRAPH)
+    g.query("UNWIND range(1, 500) AS i CREATE (:N {i: i})")
+
+    async def steps(s):
+        slow = await s.call_tool("query_graph_readonly", {"graph": GRAPH, "timeout_ms": 100,
+                                                          "query": "MATCH (a:N), (b:N), (c:N) RETURN count(*)"})
+        fast = await s.call_tool("query_graph_readonly", {"graph": GRAPH, "query": "MATCH (n:N) RETURN count(n)"})
+        return slow, fast
+
+    slow, fast = session(steps)
+    assert slow.is_error and "timed out" in slow.content[0].text.lower()
+    assert fast.structured_content["rows"] == [[500]]
+
+
+def test_schema_and_graph_list(tmp_path, clean):
+    repo = make(tmp_path / "shop", {**MESSY_REPO})
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        schema = await s.call_tool("get_graph_schema", {"graph": GRAPH})
+        missing = await s.call_tool("get_graph_schema", {"graph": "no_such_graph_xyz"})
+        graphs = await s.call_tool("list_graphs", {})
+        bad = await s.call_tool("get_graph_schema", {"graph": "bad name!"})
+        return schema, missing, graphs, bad
+
+    schema, missing, graphs, bad = session(steps)
+    sc = schema.structured_content
+    labels = {l["label"]: l for l in sc["labels"]}
+    assert labels["Service"]["count"] == 4 and labels["Service"]["properties"]["name"] == 4
+    assert any(c["from"] == "Service" and c["type"] == "CALLS" and c["to"] == "Service" for c in sc["connections"])
+    assert {r["type"] for r in sc["relationship_types"]} >= {"CALLS"}
+    assert missing.is_error and "empty or does not exist" in missing.content[0].text
+    assert bad.is_error and "graph name must be" in bad.content[0].text
+    listed = {g["graph"]: g["nexttrace_map"] for g in graphs.structured_content["graphs"]}
+    assert listed[GRAPH] is True
+
+
+def test_connection_settings_reach_the_client(monkeypatch):
+    from nexttrace import graphdb
+    seen = {}
+    import falkordb
+    monkeypatch.setattr(falkordb, "FalkorDB", lambda **kw: seen.update(kw))
+    for k in ("FALKORDB_HOST", "FALKORDB_PORT", "FALKORDB_USERNAME", "FALKORDB_PASSWORD", "FALKORDB_TLS"):
+        monkeypatch.delenv(k, raising=False)
+    graphdb.connect()
+    assert seen == {"host": "localhost", "port": 6379, "username": None, "password": None, "ssl": False}
+    monkeypatch.setenv("FALKORDB_HOST", "db.example.cloud")
+    monkeypatch.setenv("FALKORDB_PORT", "6380")
+    monkeypatch.setenv("FALKORDB_USERNAME", "agent")
+    monkeypatch.setenv("FALKORDB_PASSWORD", "s3cret")
+    monkeypatch.setenv("FALKORDB_TLS", "true")
+    graphdb.connect()
+    assert seen == {"host": "db.example.cloud", "port": 6380, "username": "agent", "password": "s3cret", "ssl": True}
+    monkeypatch.setenv("FALKORDB_USERNAME", "")
+    monkeypatch.setenv("FALKORDB_PASSWORD", "")
+    monkeypatch.setenv("FALKORDB_TLS", "false")
+    graphdb.connect()
+    assert seen["username"] is None and seen["password"] is None and seen["ssl"] is False   # empty means unset

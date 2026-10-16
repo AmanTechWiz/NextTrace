@@ -4,7 +4,8 @@ Mapping is the deterministic parser in nexttrace.mapper; no LLM runs here. The c
 the parser missed with add_connection, which only accepts a quote the server finds in the code.
 
 Run:  uv run python -m nexttrace.mcp_server        (stdio)
-Env:  FALKORDB_HOST (localhost), FALKORDB_PORT (6379)
+Env:  FALKORDB_HOST (localhost), FALKORDB_PORT (6379), FALKORDB_USERNAME, FALKORDB_PASSWORD, FALKORDB_TLS=true
+      (the same names the official FalkorDB MCP server uses)
 """
 import functools
 import os
@@ -13,12 +14,12 @@ from pathlib import Path
 from typing import Any
 
 import redis
-from falkordb import FalkorDB
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from nexttrace import mapper
+from nexttrace.graphdb import connect
 
 server = MCPServer(
     name="nexttrace",
@@ -28,7 +29,9 @@ server = MCPServer(
         "Every connection carries evidence (file:line or traffic count): cite it instead of guessing. "
         "The parser misses some wiring (registries, message buses, generated clients). Use find_gaps to see where, "
         "read that code, and record each call you confirm with add_connection, quoting the exact line. "
-        "Connections you add are stored as inferred, never as fact."
+        "Connections you add are stored as inferred, never as fact. For questions the tools don't answer, "
+        "get_graph_schema then query_graph_readonly runs your own read-only Cypher (including FalkorDB's graph "
+        "algorithms); the map itself only changes through the checked tools."
     ),
 )
 GRAPH_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -48,7 +51,7 @@ HOST, PORT = os.environ.get("FALKORDB_HOST", "localhost"), int(os.environ.get("F
 
 
 def _db():
-    return FalkorDB(host=HOST, port=PORT)
+    return connect(HOST, PORT)
 
 
 def _graph_name(name: str) -> str:
@@ -65,6 +68,10 @@ def _friendly(fn):
             return fn(*args, **kwargs)
         except redis.exceptions.ConnectionError as e:
             raise ToolError(f"FalkorDB is not reachable at {HOST}:{PORT}. Start it (docker start falkordb) and retry.") from e
+        except redis.exceptions.AuthenticationError as e:
+            raise ToolError("FalkorDB refused the login: check FALKORDB_USERNAME and FALKORDB_PASSWORD") from e
+        except redis.exceptions.ResponseError as e:  # anything FalkorDB rejects: say what, not "tool crashed"
+            raise ToolError(f"FalkorDB error: {e}") from e
     return run
 
 
@@ -86,7 +93,7 @@ def map_repo(path: str, graph: str = "", traces: list[str] | None = None) -> dic
             raise ToolError(f"traces file not found: {t}")
     name = _graph_name(graph or re.sub(r"[^A-Za-z0-9_-]", "_", repo.name))
     try:
-        summary = mapper.map_repo(repo, name, traces or [], host=HOST, port=PORT)
+        summary = mapper.map_repo(repo, name, traces or [])
     except ValueError as e:  # e.g. a traces CSV without spanID / parentSpanID / serviceName
         raise ToolError(f"could not read traces: {e}") from e
     if summary["services"] == 0:
@@ -538,6 +545,99 @@ def remove_connection(graph: str, caller: str, callee: str, reason: str) -> dict
         raise ToolError(f"{caller} -> {callee} was found by the parser (sources {rows[0][0]}); it can't be removed")
     g.query("MATCH (:Service {name: $a})-[c:CALLS]->(:Service {name: $b}) DELETE c", {"a": caller, "b": callee})
     return {"removed": f"{caller} -> {callee}", "reason": reason[:300]}
+
+
+# ---------- generic read access (the official FalkorDB MCP server's query and schema tools, read-only) ----------
+
+def _plain(v):
+    """FalkorDB values (nodes, edges, paths) as JSON-friendly data."""
+    from falkordb import Edge, Node, Path as GPath
+    if isinstance(v, Node):
+        return {"node": v.id, "labels": list(v.labels), "properties": {k: _plain(x) for k, x in v.properties.items()}}
+    if isinstance(v, Edge):
+        return {"edge": v.id, "type": v.relation, "from": v.src_node, "to": v.dest_node,
+                "properties": {k: _plain(x) for k, x in v.properties.items()}}
+    if isinstance(v, GPath):
+        return {"path": [_plain(n) for n in v.nodes()], "edges": [_plain(e) for e in v.edges()]}
+    if isinstance(v, (list, tuple)):
+        return [_plain(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _plain(x) for k, x in v.items()}
+    return v
+
+
+@server.tool(annotations=ToolAnnotations(title="List graphs", read_only_hint=True), structured_output=True)
+@_friendly
+def list_graphs() -> dict[str, Any]:
+    """Every graph in the FalkorDB instance, and whether it holds a NextTrace service map."""
+    db, out = _db(), []
+    for name in sorted(db.list_graphs()):
+        try:
+            mapped = db.select_graph(name).ro_query("MATCH (r:MapRun) RETURN count(r)").result_set[0][0] > 0
+        except Exception:
+            mapped = False
+        out.append({"graph": name, "nexttrace_map": mapped})
+    return {"graphs": out}
+
+
+@server.tool(annotations=ToolAnnotations(title="Graph schema", read_only_hint=True), structured_output=True)
+@_friendly
+def get_graph_schema(graph: str, sample: int = 200) -> dict[str, Any]:
+    """Labels, relationship types, how they connect, and property names, with counts. Read this before writing Cypher.
+
+    sample: nodes per label used to list property names (counts of properties are within that sample).
+    """
+    g = _db().select_graph(_graph_name(graph))
+    ident = re.compile(r"^[A-Za-z0-9_]+$")
+    try:
+        labels = [r[0] for r in g.ro_query("CALL db.labels()").result_set]
+        rels = [r[0] for r in g.ro_query("CALL db.relationshipTypes()").result_set]
+    except redis.exceptions.ResponseError:  # FalkorDB errors on a graph that doesn't exist
+        labels = rels = []
+    if not labels and not rels:
+        raise ToolError(f"graph {graph!r} is empty or does not exist")
+    sample = max(1, min(int(sample), 2000))
+    out_labels = []
+    for label in labels:
+        if not ident.match(label):
+            continue
+        count = g.ro_query(f"MATCH (n:`{label}`) RETURN count(n)").result_set[0][0]
+        props = dict(g.ro_query(f"MATCH (n:`{label}`) WITH n LIMIT {sample} UNWIND keys(n) AS k RETURN k, count(*)").result_set)
+        out_labels.append({"label": label, "count": count, "properties": props})
+    out_rels = []
+    for rel in rels:
+        if not ident.match(rel):
+            continue
+        count = g.ro_query(f"MATCH ()-[r:`{rel}`]->() RETURN count(r)").result_set[0][0]
+        props = dict(g.ro_query(f"MATCH ()-[r:`{rel}`]->() WITH r LIMIT {sample} UNWIND keys(r) AS k RETURN k, count(*)").result_set)
+        out_rels.append({"type": rel, "count": count, "properties": props})
+    links = [{"from": a, "type": t, "to": b, "count": n} for a, t, b, n in g.ro_query(
+        "MATCH (a)-[r]->(b) RETURN labels(a)[0], type(r), labels(b)[0], count(*) ORDER BY count(*) DESC").result_set]
+    return {"graph": graph, "labels": out_labels, "relationship_types": out_rels, "connections": links}
+
+
+@server.tool(annotations=ToolAnnotations(title="Run a read-only Cypher query", read_only_hint=True), structured_output=True)
+@_friendly
+def query_graph_readonly(graph: str, query: str, params: dict[str, Any] | None = None, max_rows: int = 200,
+                         timeout_ms: int = 5000) -> dict[str, Any]:
+    """Run your own Cypher on a graph. Read-only: FalkorDB itself refuses anything that writes.
+
+    Use $name placeholders with params (parameters can't be used in LIMIT/SKIP). FalkorDB supports a subset of
+    Cypher plus graph algorithms, e.g. CALL algo.pageRank('Service','CALLS') YIELD node, score,
+    CALL algo.betweenness({nodeLabels:['Service'], relationshipTypes:['CALLS']}) YIELD node, score,
+    CALL algo.bfs(startNode, maxDepth, 'CALLS') YIELD nodes, edges, and shortestPath((a)-[:CALLS*]->(b)).
+    To change the map use the checked tools (add_connection, add_service, ...), not this one.
+    max_rows: rows returned (1-1000); timeout_ms: 100-30000.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    max_rows, timeout_ms = max(1, min(int(max_rows), 1000)), max(100, min(int(timeout_ms), 30000))
+    try:
+        res = g.ro_query(query, params or None, timeout=timeout_ms)
+    except redis.exceptions.ResponseError as e:  # bad Cypher, a write, a timeout: tell the agent exactly what
+        raise ToolError(f"FalkorDB rejected the query: {e}") from e
+    rows = [[_plain(v) for v in row] for row in res.result_set]
+    return {"columns": [h[1] if isinstance(h, (list, tuple)) else h for h in res.header], "rows": rows[:max_rows],
+            "row_count": len(rows), "truncated": len(rows) > max_rows, "run_time_ms": res.run_time_ms}
 
 
 if __name__ == "__main__":
