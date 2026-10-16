@@ -187,7 +187,9 @@ def find_gaps(graph: str) -> dict[str, Any]:
     """Where the map may be incomplete. Each list is computed by the server, not guessed; work through all of them.
 
     unmapped_folders: deployable folders (with a Dockerfile, package.json, pom.xml, go.mod, .csproj, ...) that no
-      service covers. Read each: add the ones that run as a service with add_service; skip shared libraries and tools.
+      service covers. `may_belong_to` names mapped services that have no code yet and whose name fits the folder:
+      attach those with set_service_folder. Add the other folders that run as a service with add_service; skip
+      shared libraries and tools.
     possible_duplicates: pairs that may be one service under two names. Find which name the system really uses
       and merge with merge_services.
     isolated: services with no known calls in or out. no_service_calls: services that call only datastores or infra
@@ -195,10 +197,10 @@ def find_gaps(graph: str) -> dict[str, Any]:
     """
     g = _db().select_graph(_graph_name(graph))
     rows = g.ro_query(GAPS).result_set
-    if not rows:
-        raise ToolError(f"graph {graph!r} has no services; run map_repo first")
     roots = dict(g.ro_query("MATCH (r:MapRun) RETURN r.repo, r.root ORDER BY r.run").result_set)
     every = g.ro_query("MATCH (s:Service) WHERE NOT coalesce(s.stale, false) RETURN s.name, s.repo, s.source_dir").result_set
+    if not every:
+        raise ToolError(f"graph {graph!r} has no services; run map_repo first")
     isolated, no_service_calls = [], []
     for name, repo, src, outs, ins, calls_service in rows:
         item = {"service": name, "folder": str(Path(roots.get(repo, "")) / src) if src else "", "callers": ins}
@@ -206,8 +208,17 @@ def find_gaps(graph: str) -> dict[str, Any]:
             isolated.append(item)
         elif not calls_service:
             no_service_calls.append(item)
-    unmapped = [str(Path(root) / f) for repo, root in roots.items() if root and Path(root).is_dir()
-                for f in mapper.unmapped_folders(Path(root), [d for _, r, d in every if r == repo])]
+    unmapped = []
+    for repo, root in roots.items():
+        if not root or not Path(root).is_dir():
+            continue
+        folderless = [n for n, r, d in every if r == repo and not d]
+        for f in mapper.unmapped_folders(Path(root), [d for _, r, d in every if r == repo]):
+            item = {"folder": str(Path(root) / f)}
+            match = [n for n in folderless if mapper.folder_matches(f, n)]
+            if match:  # a service the scanner found without code, whose name fits this folder: attach with set_service_folder
+                item["may_belong_to"] = match
+            unmapped.append(item)
     dups = mapper.possible_duplicates([(n, str(Path(roots.get(r) or "") / d) if d else "") for n, r, d in every])
     return {"graph": graph, "services": len(rows), "unmapped_folders": unmapped, "possible_duplicates": dups,
             "isolated": isolated, "no_service_calls": no_service_calls}
@@ -361,8 +372,9 @@ def merge_services(graph: str, keep: str, drop: str, file: str, line: int, quote
     keep: the real name (how callers address it, or how the service names itself). It may not be in the map yet:
       then `drop` is renamed to it. drop: the wrong or duplicate name; its calls, callers and routes move to keep.
     file/line/quote: proof that `keep` is the name in use; the quote must contain `keep` as a whole word.
-    The server also needs proof both names are the same code: their folders are the same or nested, or the quote
-    is in drop's own folder (a self-declared name such as spring.application.name), or the quote names both.
+    The server also needs proof both names are the same code, checked by itself: their folders are the same or
+    nested, or both deploy the same image built for this system (public images like mongo don't count), or the
+    quote is in drop's own folder (a self-declared name such as spring.application.name), or the quote names both.
     The old name is remembered as an alias, so re-mapping won't split them again.
     """
     g = _db().select_graph(_graph_name(graph))
@@ -371,8 +383,9 @@ def merge_services(graph: str, keep: str, drop: str, file: str, line: int, quote
     if not mapper.SERVICE_NAME.match(keep):
         raise ToolError("keep must be lowercase letters, digits, '.', '_' or '-' (max 63)")
     _require_service(g, graph, drop)
-    d_repo, d_dir = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir", {"n": drop}).result_set[0]
-    k_row = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir", {"n": keep}).result_set
+    d_repo, d_dir, d_img = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir, coalesce(s.images, [])",
+                                      {"n": drop}).result_set[0]
+    k_row = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, s.source_dir, coalesce(s.images, [])", {"n": keep}).result_set
     repo, root, _ = _repo_root(g, d_repo)
     if not mapper.names_in(quote, keep):
         raise ToolError(f"not merged: the quote must contain {keep!r} as a whole word")
@@ -384,9 +397,12 @@ def merge_services(graph: str, keep: str, drop: str, file: str, line: int, quote
     if k_row and k_row[0][1] and d_dir:
         a, b = Path(k_row[0][1]), Path(d_dir)
         same_code = same_code or a == b or a in b.parents or b in a.parents
+    shared = sorted(set(k_row[0][2]) & set(d_img)) if k_row else []
+    same_code = same_code or bool(shared)  # both deploy the same image built for this system
     if not same_code:
-        raise ToolError("not merged: no proof these are the same service. Cite a line in the drop service's own folder, "
-                        "a line naming both, or merge only when their folders match")
+        raise ToolError("not merged: no proof these are the same service. It needs one of: the same or nested code "
+                        "folders, the same image built for this system in both deploy files, a quote from the drop "
+                        "service's own folder, or a quote naming both")
     evidence = f"ai | {rel}:{at} | {' '.join(quote.split())[:160]}"
     if not k_row:  # the real name isn't in the map yet: rename
         g.query("MATCH (s:Service {name: $drop}) SET s.name = $keep, s.aliases = coalesce(s.aliases, []) + [$drop], "
@@ -428,6 +444,100 @@ def _move_edges(g, drop, keep) -> dict:
             g.query("MATCH (e:Endpoint {key: $old}), (k:Service {name: $keep}) SET e.key = $new, e.service = $keep "
                     "MERGE (k)-[:EXPOSES]->(e)", {"old": key, "new": new, "keep": keep})
     return {"calls_out": len(out), "callers": len(inc), "routes": len(routes)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Attach a code folder to a service", idempotent_hint=True), structured_output=True)
+@_friendly
+def set_service_folder(graph: str, service: str, folder: str, file: str = "", line: int = 0, quote: str = "",
+                       reason: str = "") -> dict[str, Any]:
+    """Give a mapped service its code folder (it was found in deploy files only), so its code gets scanned.
+
+    The folder must be inside the repo, deployable (has a build file) and not another service's. Proof, any one:
+      - the folder's name fits the service's name by convention and no other free folder fits (no quote needed);
+      - a quote from a file inside the folder that names the service (an app id, package or application name);
+      - a quote naming both the service and the folder (e.g. a build or CI line).
+    folder="" removes a folder an agent attached earlier. Re-run map_repo afterwards so its calls are scanned.
+    """
+    g = _db().select_graph(_graph_name(graph))
+    _require_service(g, graph, service)
+    repo, cur, origin = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.repo, coalesce(s.source_dir, ''), s.folder_origin",
+                                   {"n": service}).result_set[0]
+    if not folder:
+        if origin != "ai":
+            raise ToolError("only a folder an agent attached can be removed")
+        g.query("MATCH (s:Service {name: $n}) SET s.source_dir = '', s.agent_folder = null, s.folder_origin = null, "
+                "s.folder_evidence = null", {"n": service})
+        return {"service": service, "folder": "", "action": "removed"}
+    if cur:
+        raise ToolError(f"{service!r} already has its code folder {cur!r}")
+    repo, root, _ = _repo_root(g, repo)
+    root = root.resolve()
+    f = (root / folder).resolve() if not Path(folder).is_absolute() else Path(folder).resolve()
+    if root != f and root not in f.parents:
+        raise ToolError(f"not set: {folder} is outside the repo")
+    if not mapper.deployable(f):
+        raise ToolError(f"not set: {folder} has no build file, so it is not a deployable service")
+    rel = str(f.relative_to(root)) if f != root else "."
+    here = Path(rel)
+    taken = [n for n, d in g.ro_query("MATCH (s:Service {repo: $repo}) WHERE s.source_dir <> '' RETURN s.name, s.source_dir",
+                                      {"repo": repo}).result_set
+             if Path(d) == here or Path(d) in here.parents or here in Path(d).parents or d == "."]
+    if taken:
+        raise ToolError(f"not set: {rel} overlaps the code of {taken[0]!r}")
+    proof = ""
+    if quote:
+        if not mapper.names_in(quote, service):
+            raise ToolError(f"not set: the quote must contain {service!r} as a whole word")
+        try:
+            qrel, at = mapper.verify_quote(root, file, line, quote, service)
+        except ValueError as e:
+            raise ToolError(f"not set: {e}") from e
+        inside = qrel == rel or qrel.startswith(rel.rstrip("/") + "/") or rel == "."
+        if not inside and not any(n in quote for n in [rel] + mapper.folder_names(rel)):
+            raise ToolError("not set: the quote must come from a file inside the folder, or name the folder too")
+        proof = f"ai | {qrel}:{at} | {' '.join(quote.split())[:160]}"
+    else:
+        if not mapper.folder_matches(rel, service):
+            raise ToolError(f"not set: {rel!r} doesn't match {service!r} by name; cite a line instead (file, line, quote)")
+        owned = [d for (d,) in g.ro_query("MATCH (s:Service {repo: $repo}) RETURN s.source_dir", {"repo": repo}).result_set if d]
+        rivals = [x for x in mapper.unmapped_folders(root, owned) if x != rel and mapper.folder_matches(x, service)]
+        if rivals:
+            raise ToolError(f"not set: other free folders also fit {service!r} by name ({rivals[:3]}); cite a line instead")
+        proof = f"convention | {rel} | folder name fits {service}"
+    g.query("MATCH (s:Service {name: $n}) SET s.source_dir = $d, s.agent_folder = $d, s.folder_origin = 'ai', "
+            "s.folder_evidence = $p, s.folder_reason = $r", {"n": service, "d": rel, "p": proof, "r": reason[:300]})
+    return {"service": service, "folder": rel, "proof": proof, "action": "set",
+            "next": "run map_repo on this repo again so the service's code is scanned"}
+
+
+@server.tool(annotations=ToolAnnotations(title="Remove a service an agent added", destructive_hint=True), structured_output=True)
+@_friendly
+def remove_service(graph: str, name: str, reason: str) -> dict[str, Any]:
+    """Undo add_service: delete a service an agent added, with its calls. Services the parser found can't be removed
+    (they come back on the next map); if one is a duplicate, use merge_services."""
+    g = _db().select_graph(_graph_name(graph))
+    _require_service(g, graph, name)
+    origin = g.ro_query("MATCH (s:Service {name: $n}) RETURN s.origin", {"n": name}).result_set[0][0]
+    if origin != "ai":
+        raise ToolError(f"{name!r} was found by the parser, not added by an agent; it can't be removed")
+    n = g.query("MATCH (s:Service {name: $n}) OPTIONAL MATCH (s)-[c]-() WITH s, count(c) AS c DETACH DELETE s RETURN c",
+                {"n": name}).result_set[0][0]
+    return {"removed": name, "calls_removed": n, "reason": reason[:300]}
+
+
+@server.tool(annotations=ToolAnnotations(title="Remove a call an agent added", destructive_hint=True), structured_output=True)
+@_friendly
+def remove_connection(graph: str, caller: str, callee: str, reason: str) -> dict[str, Any]:
+    """Undo add_connection. Only calls added by an agent (sources=['ai']) can be removed."""
+    g = _db().select_graph(_graph_name(graph))
+    rows = g.ro_query("MATCH (:Service {name: $a})-[c:CALLS]->(:Service {name: $b}) RETURN c.sources",
+                      {"a": caller, "b": callee}).result_set
+    if not rows:
+        raise ToolError(f"no call {caller} -> {callee} in graph {graph!r}")
+    if rows[0][0] != ["ai"]:
+        raise ToolError(f"{caller} -> {callee} was found by the parser (sources {rows[0][0]}); it can't be removed")
+    g.query("MATCH (:Service {name: $a})-[c:CALLS]->(:Service {name: $b}) DELETE c", {"a": caller, "b": callee})
+    return {"removed": f"{caller} -> {callee}", "reason": reason[:300]}
 
 
 if __name__ == "__main__":

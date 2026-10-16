@@ -251,7 +251,22 @@ def _kind(name, s):
 
 # ---------- scan ----------
 
-def scan(repo, known=()) -> ServiceMap:
+def images_of(hint: str) -> list:
+    """Image repositories built for this system (tag dropped). Public engine images (mongo, redis, ...) are left out:
+    two services running `mongo` are not the same service."""
+    out = set()
+    for t in hint.split():
+        if "/" not in t or "$" in t or "{" in t:
+            continue
+        repo = t.split("@")[0]
+        head, _, last = repo.rpartition("/")
+        repo = f"{head}/{last.split(':')[0]}"
+        if not DB_ENGINE.search(repo.rsplit("/", 1)[-1]):
+            out.add(repo)
+    return sorted(out)
+
+
+def scan(repo, known=(), folders=None) -> ServiceMap:
     repo = Path(repo).resolve()
     m = ServiceMap(repo=repo.name, commit=_commit(repo), root=str(repo), known=set(known))
     pending = []  # (caller, value, file, mode) found while reading declarations
@@ -264,6 +279,9 @@ def scan(repo, known=()) -> ServiceMap:
     if repo.name in m.services:  # polyrepo: a repo named after a service is that service's code
         m.services[repo.name]["source_dir"] = "."
     _source_dirs(repo, m)
+    for name, folder in (folders or {}).items():  # code folders an agent attached with proof (set_service_folder)
+        if name in m.services and not m.services[name]["source_dir"] and folder and (repo / folder).is_dir():
+            m.services[name]["source_dir"] = folder
     _codeowners(repo, m)
     for name, s in m.services.items():
         s["kind"] = _kind(name, s)
@@ -341,7 +359,7 @@ UPSERT_SERVICES = """
 UNWIND $rows AS r
 MERGE (s:Service {name: r.name})
 SET s.kind = r.kind, s.source_dir = r.source_dir, s.declared_in = r.declared_in, s.owner = r.owner,
-    s.repo = $repo, s.last_run = $run, s.commit = $commit, s.stale = false, s.origin = 'scanner'
+    s.repo = $repo, s.last_run = $run, s.commit = $commit, s.stale = false, s.origin = 'scanner', s.images = r.images
 """
 
 UPSERT_CALLS = """
@@ -394,7 +412,8 @@ def write(graph, m: ServiceMap) -> dict:
     from nexttrace.graphdb import ensure_unique
     ensure_unique(graph, "Service", "name")
     p["run"] = run
-    graph.query(UPSERT_SERVICES, {**p, "rows": [{"name": n, **{k: s[k] for k in ("kind", "source_dir", "declared_in", "owner")}}
+    graph.query(UPSERT_SERVICES, {**p, "rows": [{"name": n, "images": images_of(s["hint"]),
+                                                **{k: s[k] for k in ("kind", "source_dir", "declared_in", "owner")}}
                                                for n, s in sorted(m.services.items())]})
     graph.query(UPSERT_CALLS, {**p, "rows": rows})
     kept = recheck_inferred(graph, m.repo, Path(m.root), run) if m.root else 0
@@ -497,7 +516,8 @@ def unmapped_folders(root: Path, mapped: list, depth: int = 5) -> list:
 
 
 def _norm_name(n: str) -> str:
-    n = re.sub(r"[^a-z0-9]", "", n.lower())
+    n = re.sub(r"[-_.]v?\d+$", "", n.lower())  # version suffixes: orders-v2, orders.2
+    n = re.sub(r"[^a-z0-9]", "", n)
     for suffix in ("main", "service", "svc", "app", "api", "server"):
         if n.endswith(suffix) and len(n) > len(suffix) + 2:
             n = n[: -len(suffix)]
@@ -515,6 +535,33 @@ def possible_duplicates(services: list) -> list:
             if nested or _norm_name(a) == _norm_name(b):
                 out.append({"names": [a, b], "why": "same folder" if nested else "similar names"})
     return out
+
+
+GENERIC_DIRS = {"src", "source", "app", "apps", "server", "service", "services", "api", "backend", "main", "code", "cmd"}
+
+
+def folder_names(folder: str) -> list:
+    """Names a code folder can go by: its own, plus its parent's when the folder is a generic one like src/ or server/."""
+    parts = [x for x in Path(folder).parts if x not in (".", "")]
+    names = parts[-1:]
+    while parts and parts[-1].lower() in GENERIC_DIRS and len(parts) > 1:
+        parts = parts[:-1]
+        names.append(parts[-1])
+    return names
+
+
+def folder_matches(folder: str, service: str) -> bool:
+    """Naming convention: the folder and the service name agree once case, punctuation and suffixes like -service,
+    .API or -main are dropped, allowing a project prefix (RedDog.OrderService / order-service, ftgo-order-service /
+    order-service, Ordering.API / ordering-api, order-service/order-service-main / order-service)."""
+    want = _norm_name(service)
+    if len(want) < 3:
+        return False
+    for n in folder_names(folder):
+        got = _norm_name(n)
+        if len(got) >= 3 and (got == want or got.endswith(want) or want.endswith(got) and len(got) >= 5):
+            return True
+    return False
 
 
 INFERRED_SERVICES = "MATCH (s:Service {repo: $repo, origin: 'ai'}) RETURN s.name, s.evidence"
@@ -535,6 +582,16 @@ def recheck_inferred_services(graph, repo, root: Path, run) -> int:
     return kept
 
 
+def agent_folders(graph, repo_name) -> dict:
+    """Code folders an agent attached to services of this repo, so the scanner reads their code on re-map."""
+    try:
+        rows = graph.ro_query("MATCH (s:Service {repo: $repo}) WHERE s.folder_origin = 'ai' RETURN s.name, s.agent_folder",
+                              {"repo": repo_name}).result_set
+    except Exception:
+        return {}
+    return dict(rows)
+
+
 def known_services(graph, repo_name) -> set:
     """Services other repos already mapped into this graph (the cross-repo join keys)."""
     try:
@@ -549,7 +606,7 @@ def map_repo(path, graph_name=None, traces=(), host="localhost", port=6379) -> d
     from falkordb import FalkorDB
     path = Path(path).resolve()
     graph = FalkorDB(host=host, port=port).select_graph(graph_name or path.name)
-    m = scan(path, known=known_services(graph, path.name))
+    m = scan(path, known=known_services(graph, path.name), folders=agent_folders(graph, path.name))
     unknown = Counter()
     if traces:
         import pandas as pd

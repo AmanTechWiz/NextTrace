@@ -50,7 +50,8 @@ def test_tools_are_listed_with_read_only_hints():
     hints = {t.name: bool(t.annotations and t.annotations.read_only_hint) for t in tools}
     assert hints == {"map_repo": False, "list_maps": True, "service_calls": True, "endpoint_calls": True,
                      "find_gaps": True, "add_connection": False, "export_map": False,
-                     "add_service": False, "merge_services": False}
+                     "add_service": False, "merge_services": False, "set_service_folder": False,
+                     "remove_service": False, "remove_connection": False}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -252,7 +253,7 @@ def test_find_gaps_lists_unmapped_folders_and_duplicates(tmp_path, clean):
         return await s.call_tool("find_gaps", {"graph": GRAPH})
 
     g = session(steps).structured_content
-    assert sorted(Path(f).name for f in g["unmapped_folders"]) == ["admin-ui", "common"]
+    assert sorted(Path(f["folder"]).name for f in g["unmapped_folders"]) == ["admin-ui", "common"]
     assert {tuple(sorted(d["names"])) for d in g["possible_duplicates"]} == {("front-end", "frontend")}
 
 
@@ -341,3 +342,114 @@ def test_merge_folds_a_duplicate_and_keeps_its_calls(tmp_path, clean):
     assert remap.structured_content["services"] == 3
     calls = {c["service"]: c for c in fe.structured_content["calls"]}
     assert set(calls) == {"cart"} and len(calls["cart"]["evidence"]) == 2  # k8s CART_ADDR and web/app.js, merged
+
+
+def k8s(name, image, extra=""):
+    return ("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: %s\nspec:\n  template:\n    metadata:\n"
+            "      annotations: {%s}\n    spec:\n      containers:\n      - name: app\n        image: %s\n") % (name, extra, image)
+
+
+# Dapr-style: services exist only as deploy names; code lives in differently named folders (.NET, Java, monorepo).
+FOLDERLESS_REPO = {
+    "deploy/order.yaml": k8s("order-service", "ghcr.io/acme/shop-order-service:1", 'dapr.io/app-id: "order-service"'),
+    "deploy/make-line.yaml": k8s("make-line-service", "ghcr.io/acme/shop-make-line:1"),
+    "deploy/billing.yaml": k8s("billing", "ghcr.io/acme/billing:1"),
+    "deploy/ui.yaml": k8s("ui", "ghcr.io/acme/ui:1"),
+    "Acme.OrderService/Acme.OrderService.csproj": "<Project/>",
+    "Acme.OrderService/Program.cs": 'const string AppId = "order-service";\n',
+    "services/make-line/src/package.json": '{"name": "make-line"}',
+    "Acme.UI/package.json": '{"name": "acme-ui"}',
+    "Acme.UI/vue.config.js": "// ui\nmodule.exports = { pages: 'ui' }\n",
+    "billing-v1/pom.xml": "<project/>", "billing-v2/pom.xml": "<project/>",   # two folders fit "billing"
+    "ci/build-ui.yml": "      - run: docker build -t ui Acme.UI\n",
+}
+
+
+def test_attach_folders_by_convention_or_cited_line(tmp_path, clean):
+    repo = make(tmp_path / "shop", FOLDERLESS_REPO)
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        gaps = await s.call_tool("find_gaps", {"graph": GRAPH})
+        conv = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "order-service", "folder": "Acme.OrderService"})
+        mono = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "make-line-service", "folder": "services/make-line/src"})
+        ambiguous = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "billing", "folder": "billing-v1"})
+        short = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "ui", "folder": "Acme.UI"})
+        wrong_line = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "ui", "folder": "Acme.UI",
+                                                              "file": "deploy/ui.yaml", "line": 4, "quote": "name: ui"})
+        cited = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "ui", "folder": "Acme.UI",
+                                                         "file": "ci/build-ui.yml", "line": 1, "quote": "docker build -t ui Acme.UI"})
+        taken = await s.call_tool("set_service_folder", {"graph": GRAPH, "service": "billing", "folder": "Acme.OrderService"})
+        remap = await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        order = await s.call_tool("service_calls", {"graph": GRAPH, "service": "order-service"})
+        return gaps, conv, mono, ambiguous, short, wrong_line, cited, taken, remap, order
+
+    gaps, conv, mono, ambiguous, short, wrong_line, cited, taken, remap, order = session(steps)
+    hints = {Path(u["folder"]).name: u.get("may_belong_to") for u in gaps.structured_content["unmapped_folders"]}
+    assert hints["Acme.OrderService"] == ["order-service"] and hints["Acme.UI"] is None  # "ui" too short to guess
+    assert conv.structured_content["proof"].startswith("convention") and mono.structured_content["folder"] == "services/make-line/src"
+    assert ambiguous.is_error and "other free folders also fit" in ambiguous.content[0].text
+    assert short.is_error and "doesn't match" in short.content[0].text
+    assert wrong_line.is_error and "inside the folder, or name the folder" in wrong_line.content[0].text
+    assert cited.structured_content["proof"].startswith("ai | ci/build-ui.yml:1")
+    assert taken.is_error and "overlaps the code of 'order-service'" in taken.content[0].text
+    assert order.structured_content["source_dir"] == "Acme.OrderService"     # kept across re-map
+    assert order.structured_content["kind"] == "service"                    # now scanned as code
+
+
+def test_merge_by_shared_image_but_never_by_public_image(tmp_path, clean):
+    repo = make(tmp_path / "shop", {
+        "docker-compose.yml": ("services:\n  user: {image: 'gcr.io/acme/shop-user:2.0'}\n"
+                               "  user-db: {image: 'mongo:6'}\n  cart-db: {image: 'mongo:6'}\n"),
+        "k8s/users.yaml": k8s("users", "gcr.io/acme/shop-user:latest"),
+        "k8s/front.yaml": k8s("front", "gcr.io/acme/front:1", 'note: "USERS_HOST=users"'),
+    })
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        public = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "user-db", "drop": "cart-db",
+                                                      "file": "docker-compose.yml", "line": 3, "quote": "user-db: {image: 'mongo:6'}"})
+        same = await s.call_tool("merge_services", {"graph": GRAPH, "keep": "users", "drop": "user",
+                                                    "file": "k8s/front.yaml", "line": 6, "quote": 'USERS_HOST=users'})
+        return public, same
+
+    public, same = session(steps)
+    assert public.is_error and "same image built for this system" in public.content[0].text
+    assert not same.is_error and same.structured_content["action"] == "merged"
+
+
+def test_undo_only_touches_what_an_agent_added(tmp_path, clean):
+    repo = make(tmp_path / "shop", MESSY_REPO)
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        await s.call_tool("add_service", {"graph": GRAPH, "name": "admin-ui", "kind": "service", "file": "admin-ui/package.json",
+                                          "line": 1, "quote": '"name": "admin-ui"', "folder": "admin-ui"})
+        await s.call_tool("add_connection", {"graph": GRAPH, "caller": "admin-ui", "callee": "cart",
+                                             "file": "admin-ui/src/api.js", "line": 1, "quote": 'export const CART = "http://cart:80";'})
+        no = [await s.call_tool("remove_service", {"graph": GRAPH, "name": "cart", "reason": "x"}),
+              await s.call_tool("remove_connection", {"graph": GRAPH, "caller": "front-end", "callee": "cart", "reason": "x"}),
+              await s.call_tool("remove_connection", {"graph": GRAPH, "caller": "cart", "callee": "admin-ui", "reason": "x"})]
+        rc = await s.call_tool("remove_connection", {"graph": GRAPH, "caller": "admin-ui", "callee": "cart", "reason": "typo"})
+        await s.call_tool("add_connection", {"graph": GRAPH, "caller": "admin-ui", "callee": "cart",
+                                             "file": "admin-ui/src/api.js", "line": 1, "quote": 'export const CART = "http://cart:80";'})
+        rs = await s.call_tool("remove_service", {"graph": GRAPH, "name": "admin-ui", "reason": "test node"})
+        gone = await s.call_tool("service_calls", {"graph": GRAPH, "service": "admin-ui"})
+        return no, rc, rs, gone
+
+    no, rc, rs, gone = session(steps)
+    assert all(n.is_error for n in no)
+    assert "found by the parser" in no[0].content[0].text and "found by the parser" in no[1].content[0].text
+    assert "no call cart -> admin-ui" in no[2].content[0].text
+    assert not rc.is_error and rs.structured_content["calls_removed"] == 1 and gone.is_error
+
+
+def test_find_gaps_on_a_config_only_repo(tmp_path, clean):
+    repo = make(tmp_path / "cfg", {"k8s/a.yaml": k8s("a", "x/a:1"), "k8s/b.yaml": k8s("b", "x/b:1")})
+
+    async def steps(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        return await s.call_tool("find_gaps", {"graph": GRAPH})
+
+    g = session(steps)
+    assert not g.is_error and g.structured_content["isolated"] == [] and g.structured_content["services"] == 0
