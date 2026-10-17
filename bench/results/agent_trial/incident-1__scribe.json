@@ -1,0 +1,134 @@
+{
+  "duration_api_ms": 17017,
+  "stop_reason": "end_turn",
+  "session_id": "39263e1b-e867-40c5-9e45-6a22562f97f7",
+  "total_cost_usd": 0.0998177,
+  "usage": {
+    "input_tokens": 7255,
+    "cache_creation_input_tokens": 14853,
+    "cache_read_input_tokens": 84777,
+    "output_tokens": 1356,
+    "output_tokens_details": {
+      "thinking_tokens": 47
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 14853,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 160,
+        "cache_read_input_tokens": 19976,
+        "cache_creation_input_tokens": 448,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 448
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 7259,
+      "outputTokens": 1381,
+      "cacheReadInputTokens": 84777,
+      "cacheCreationInputTokens": 16293,
+      "webSearchRequests": 0,
+      "costUSD": 0.0998177,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 47,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 7,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "INC-1 is resolved. The fix is to rolling-restart ts-order-service, raise its memory limit, add replicas, and confirm its callers' latency returns to baseline. It was newly written, not reused: `similar_incidents` found no past incident. The runbook is saved as \"restart and scale ts-order-service\".\n\nI resolved it with `worked=true` as you instructed. I didn't apply the fix or check that it worked, so that flag reflects your instruction and not a confirmed result.",
+  "ttft_ms": 1931,
+  "type": "result",
+  "duration_ms": 15346,
+  "uuid": "51e1d754-9130-41d9-82cf-506144d21598",
+  "ttft_stream_ms": 1476,
+  "time_to_request_ms": 30,
+  "time_to_request_phases_ms": {
+    "other": 5,
+    "system_prompt": 10,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 3,
+    "input_hooks": 1,
+    "transcript_persist": 1,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 1,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 1,
+    "tool_schema_build": 2,
+    "message_normalization": 0,
+    "client_creation": 1,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 48,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 5,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1476,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 16.7,
+  "_role": "scribe",
+  "_incident": 1
+}

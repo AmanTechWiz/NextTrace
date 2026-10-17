@@ -1,0 +1,134 @@
+{
+  "duration_api_ms": 20153,
+  "stop_reason": "end_turn",
+  "session_id": "a28aef06-ff02-494d-92ed-30de8d4672f9",
+  "total_cost_usd": 0.0974467,
+  "usage": {
+    "input_tokens": 7255,
+    "cache_creation_input_tokens": 15096,
+    "cache_read_input_tokens": 86307,
+    "output_tokens": 1352,
+    "output_tokens_details": {
+      "thinking_tokens": 118
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 15096,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 167,
+        "cache_read_input_tokens": 20570,
+        "cache_creation_input_tokens": 625,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 625
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 7259,
+      "outputTokens": 1377,
+      "cacheReadInputTokens": 87747,
+      "cacheCreationInputTokens": 15096,
+      "webSearchRequests": 0,
+      "costUSD": 0.0974467,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 118,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 6,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "INC-3 is resolved with a new fix, not one from a past incident: restart and scale out ts-route-service, raise its CPU and memory limits, then confirm latency recovers on its callers (runbook \"restart and scale ts-route-service\"). The only similar incidents on record, INC-1 and INC-2, were caused by ts-order-service, so I didn't reuse their fix.\n\nThe tool recorded `worked=true`, but I haven't applied the fix or checked that latency recovered. That's an on-call step.",
+  "ttft_ms": 3569,
+  "type": "result",
+  "duration_ms": 18856,
+  "uuid": "dd307606-dbf7-4b68-a9b7-bd607c3be4bd",
+  "ttft_stream_ms": 3036,
+  "time_to_request_ms": 25,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 7,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 3,
+    "input_hooks": 0,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 1,
+    "autocompact": 0,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 2,
+    "message_normalization": 0,
+    "client_creation": 1,
+    "request_build": 2
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 40,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 2,
+    "cpu_ms": 6,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 3036,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 20.1,
+  "_role": "scribe",
+  "_incident": 3
+}
