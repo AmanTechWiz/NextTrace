@@ -18,7 +18,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
+from nexttrace import alarms as alarm_source
 from nexttrace import failure, mapper
+from nexttrace import memory as mem
 from nexttrace.graphdb import connect
 
 server = MCPServer(
@@ -33,7 +35,10 @@ server = MCPServer(
         "failure_paths (how requests reach a service) and criticality (what matters most); cite their connections. "
         "For questions the tools don't answer, "
         "get_graph_schema then query_graph_readonly runs your own read-only Cypher (including FalkorDB's graph "
-        "algorithms); the map itself only changes through the checked tools."
+        "algorithms); the map itself only changes through the checked tools. "
+        "Incidents: triage_alarms opens them; agents hand them on with claim_incident (open -> investigating -> "
+        "diagnosed -> resolved), record_finding (cause + cited connections), resolve_incident (fix); similar_incidents "
+        "recalls past fixes. Start a session with start_session and pass it to these tools to keep your history."
     ),
 )
 GRAPH_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -680,6 +685,136 @@ def criticality(graph: str, top: int = 10, service: str = "", kind: str = "", in
     service: get one service's metrics and rank. kind: rank only service | datastore | infra | other.
     Each ranked service cites its direct callers' connections."""
     return _ask(failure.criticality, graph, top=top, service=service, kind=kind, include_stale=include_stale)
+
+
+# ---------- incidents, handoffs and memory (nexttrace.memory) ----------
+
+def _mem(fn, graph, *args, session="", log_as="", **kwargs):
+    """Run a memory operation; when the agent passes its session, record the call and its result as a step."""
+    g = _db().select_graph(_graph_name(graph))
+    try:
+        out = fn(g, *args, **kwargs)
+    except mem.ConflictError as e:
+        raise ToolError(f"conflict: {e}") from e
+    except ValueError as e:
+        raise ToolError(str(e)) from e
+    if session:
+        inc = kwargs.get("inc_id") or (args[0] if args and str(args[0]).startswith("INC-") else "")
+        try:
+            mem.log_step(g, session, log_as or fn.__name__, {"args": args, **kwargs}, out, incident=inc)
+        except ValueError as e:
+            raise ToolError(f"done, but not logged: {e}") from e
+    return out
+
+
+@server.tool(annotations=ToolAnnotations(title="Alarms from a metrics file", read_only_hint=True), structured_output=True)
+@_friendly
+def alarms_from_metrics(graph: str, csv_path: str, since: int, threshold: float = 3.0, top: int = 20) -> dict[str, Any]:
+    """Read a metrics CSV (a `time` column in epoch seconds, then `<service>_<metric>` columns) and list metrics that
+    moved >= threshold standard deviations after `since`, strongest first. Only services on the map count.
+    The loudest alarm is often a victim, not the cause: use blast_radius / failure_paths before blaming it."""
+    if not Path(csv_path).is_file():
+        raise ToolError(f"no such file: {csv_path}")
+    g = _db().select_graph(_graph_name(graph))
+    known = [r[0] for r in g.ro_query("MATCH (s:Service) RETURN s.name").result_set]
+    try:
+        return {"alarms": alarm_source.from_metrics(csv_path, int(since), known, threshold, top)}
+    except ValueError as e:
+        raise ToolError(str(e)) from e
+
+
+@server.tool(annotations=ToolAnnotations(title="Open incidents from alarms", idempotent_hint=True), structured_output=True)
+@_friendly
+def triage_alarms(graph: str, alarms: list[dict[str, Any]], agent: str = "triage", hops: int = 3,
+                  session: str = "") -> dict[str, Any]:
+    """Turn alarms ([{service, signal, at}]) into incidents: alarms on services linked within `hops` calls on the map
+    become one incident; unrelated ones become separate incidents. Idempotent: the same alarms give the same incident,
+    even from parallel agents. Every alarm must be on a service in the map."""
+    return {"incidents": _mem(mem.triage, graph, alarms, agent=agent, hops=hops, session=session, log_as="triage_alarms")}
+
+
+@server.tool(annotations=ToolAnnotations(title="List incidents", read_only_hint=True), structured_output=True)
+@_friendly
+def list_incidents(graph: str, status: str = "", limit: int = 50) -> dict[str, Any]:
+    """Incidents, newest first; filter by status (open, investigating, diagnosed, resolved) to find work to pick up."""
+    return {"incidents": _mem(mem.list_incidents, graph, status=status, limit=limit)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Read an incident", read_only_hint=True), structured_output=True)
+@_friendly
+def get_incident(graph: str, incident: str) -> dict[str, Any]:
+    """An incident's status, version, owner, alarms, affected services, cause, evidence and fix."""
+    return _mem(mem.get_incident, graph, incident)
+
+
+@server.tool(annotations=ToolAnnotations(title="Take an incident to the next step"), structured_output=True)
+@_friendly
+def claim_incident(graph: str, incident: str, agent: str, from_status: str, to_status: str, version: int = -1,
+                   note: str = "", session: str = "") -> dict[str, Any]:
+    """Hand-off step: move the incident from `from_status` to the next status and become its owner. Pass the
+    `version` you read with get_incident: if anything changed since, you get a conflict instead of a silent overwrite,
+    and exactly one of several agents racing for the same incident succeeds."""
+    v = _mem(mem.claim, graph, incident, agent, from_status, to_status, version=None if version < 0 else version,
+             note=note, session=session, log_as="claim_incident")
+    return {"incident": incident, "status": to_status, "owner": agent, "version": v}
+
+
+@server.tool(annotations=ToolAnnotations(title="Record the cause, with cited connections"), structured_output=True)
+@_friendly
+def record_finding(graph: str, incident: str, agent: str, cause: str, reason: str, cited: list[dict[str, str]],
+                   session: str = "") -> dict[str, Any]:
+    """Investigator's conclusion. You must own the incident in `investigating`. cause: the service at fault.
+    cited: the map connections your reasoning relies on, [{caller, callee}] (from blast_radius / failure_paths).
+    Each must exist on the map and be live, or nothing is recorded; the stored evidence is the map's own file:line."""
+    return _mem(mem.record_finding, graph, incident, agent, cause, reason, cited, session=session, log_as="record_finding")
+
+
+@server.tool(annotations=ToolAnnotations(title="Resolve an incident with its fix"), structured_output=True)
+@_friendly
+def resolve_incident(graph: str, incident: str, agent: str, fix: str, worked: bool = True, runbook: str = "",
+                     session: str = "") -> dict[str, Any]:
+    """Close a diagnosed incident with the fix applied. runbook: a short reusable name for the fix
+    (e.g. "restart payments"); its attempt and success counts update. worked=false records a failed attempt and
+    leaves the incident diagnosed."""
+    return _mem(mem.resolve, graph, incident, agent, fix, worked=worked, runbook=runbook, session=session,
+                log_as="resolve_incident")
+
+
+@server.tool(annotations=ToolAnnotations(title="Past incidents like this one", read_only_hint=True), structured_output=True)
+@_friendly
+def similar_incidents(graph: str, services: list[str], cause: str = "", limit: int = 5, exclude: str = "") -> dict[str, Any]:
+    """Memory recall: resolved incidents with overlapping affected services (and a bonus for the same cause), with
+    the fix used and how often it has worked. Empty means nothing similar is on record."""
+    return {"similar": _mem(mem.similar_incidents, graph, services, cause=cause, limit=limit, exclude=exclude)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Incident timeline", read_only_hint=True), structured_output=True)
+@_friendly
+def incident_timeline(graph: str, incident: str) -> dict[str, Any]:
+    """Every hand-off on an incident in order: who opened, claimed, diagnosed and resolved it, with notes."""
+    return {"incident": incident, "events": _mem(mem.timeline, graph, incident)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Start an agent session"), structured_output=True)
+@_friendly
+def start_session(graph: str, agent: str, task: str = "") -> dict[str, Any]:
+    """Begin a session whose steps are stored in the graph. Pass the returned id as `session` to incident tools so
+    each call is recorded; later sessions (or other agents) can read it with agent_history."""
+    return {"session": _mem(mem.start_session, graph, agent, task)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Note a step in your session"), structured_output=True)
+@_friendly
+def log_step(graph: str, session: str, tool: str, input: str = "", output: str = "", incident: str = "") -> dict[str, Any]:
+    """Record a step yourself (e.g. a blast_radius call and what you concluded from it)."""
+    return {"step": _mem(mem.log_step, graph, session, tool, input, output, incident=incident)}
+
+
+@server.tool(annotations=ToolAnnotations(title="Past agent sessions", read_only_hint=True), structured_output=True)
+@_friendly
+def agent_history(graph: str, session: str = "", agent: str = "", incident: str = "", limit: int = 50) -> dict[str, Any]:
+    """What was done before, newest first: one session, one agent's sessions, or everything done on one incident."""
+    return {"steps": _mem(mem.history, graph, session=session, agent=agent, incident=incident, limit=limit)}
 
 
 if __name__ == "__main__":

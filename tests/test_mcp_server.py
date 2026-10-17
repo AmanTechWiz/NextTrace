@@ -53,7 +53,11 @@ def test_tools_are_listed_with_read_only_hints():
                      "add_service": False, "merge_services": False, "set_service_folder": False,
                      "remove_service": False, "remove_connection": False, "list_graphs": True,
                      "get_graph_schema": True, "query_graph_readonly": True,
-                     "blast_radius": True, "failure_paths": True, "criticality": True}
+                     "blast_radius": True, "failure_paths": True, "criticality": True,
+                     "alarms_from_metrics": True, "triage_alarms": False, "list_incidents": True, "get_incident": True,
+                     "claim_incident": False, "record_finding": False, "resolve_incident": False,
+                     "similar_incidents": True, "incident_timeline": True, "start_session": False, "log_step": False,
+                     "agent_history": True}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -574,3 +578,51 @@ def test_failure_tools_over_mcp(tmp_path, clean):
     assert [e.is_error for e in errs] == [True] * 4
     msgs = [e.content[0].text for e in errs]
     assert "did you mean ['cart']" in msgs[0] and "max_depth" in msgs[1] and "kind must be" in msgs[2] and "graph name" in msgs[3]
+
+
+def test_three_agents_in_separate_processes_hand_off_through_the_graph(tmp_path, clean):
+    """Triage, investigator and scribe each run in their own MCP server process: the graph is all they share."""
+    repo = make(tmp_path / "shop", {**MESSY_REPO})
+    alarm = [{"service": "cart", "signal": "latency-p90", "at": 1000}, {"service": "front-end", "signal": "errors", "at": 1000}]
+
+    async def triage(s):
+        await s.call_tool("map_repo", {"path": str(repo), "graph": GRAPH})
+        sid = (await s.call_tool("start_session", {"graph": GRAPH, "agent": "triage", "task": "new alarms"})).structured_content["session"]
+        out = await s.call_tool("triage_alarms", {"graph": GRAPH, "alarms": alarm, "agent": "triage", "session": sid})
+        return out.structured_content["incidents"][0]["incident"]
+    inc = session(triage)
+
+    async def investigator(s):
+        sid = (await s.call_tool("start_session", {"graph": GRAPH, "agent": "investigator"})).structured_content["session"]
+        todo = (await s.call_tool("list_incidents", {"graph": GRAPH, "status": "open"})).structured_content["incidents"]
+        v = (await s.call_tool("get_incident", {"graph": GRAPH, "incident": todo[0]["incident"]})).structured_content["version"]
+        await s.call_tool("claim_incident", {"graph": GRAPH, "incident": inc, "agent": "investigator", "from_status": "open",
+                                             "to_status": "investigating", "version": v, "session": sid})
+        b = (await s.call_tool("blast_radius", {"graph": GRAPH, "service": "cart"})).structured_content
+        made_up = await s.call_tool("record_finding", {"graph": GRAPH, "incident": inc, "agent": "investigator", "cause": "cart",
+                                                       "reason": "x", "cited": [{"caller": "admin-ui", "callee": "cart"}]})
+        cited = [{"caller": c["caller"], "callee": c["callee"]} for c in b["cited_connections"]]
+        ok = await s.call_tool("record_finding", {"graph": GRAPH, "incident": inc, "agent": "investigator", "cause": "cart",
+                                                  "reason": "front-end errors follow cart latency", "cited": cited,
+                                                  "session": sid})
+        return made_up, ok
+    made_up, ok = session(investigator)
+    assert made_up.is_error and "not on the map" in made_up.content[0].text
+    assert ok.structured_content["evidence"] and all("|" in e for e in ok.structured_content["evidence"])
+
+    async def scribe(s):
+        sid = (await s.call_tool("start_session", {"graph": GRAPH, "agent": "scribe"})).structured_content["session"]
+        early = await s.call_tool("claim_incident", {"graph": GRAPH, "incident": inc, "agent": "scribe",
+                                                     "from_status": "open", "to_status": "investigating"})
+        done = await s.call_tool("resolve_incident", {"graph": GRAPH, "incident": inc, "agent": "scribe",
+                                                      "fix": "raise cart pool size", "runbook": "cart pool", "session": sid})
+        recall = await s.call_tool("similar_incidents", {"graph": GRAPH, "services": ["cart"]})
+        tl = await s.call_tool("incident_timeline", {"graph": GRAPH, "incident": inc})
+        hist = await s.call_tool("agent_history", {"graph": GRAPH, "incident": inc})
+        return early, done, recall, tl, hist
+    early, done, recall, tl, hist = session(scribe)
+    assert early.is_error and "conflict" in early.content[0].text
+    assert done.structured_content["status"] == "resolved"
+    assert recall.structured_content["similar"][0]["fix"] == "raise cart pool size"
+    assert [e["agent"] for e in tl.structured_content["events"]] == ["triage", "investigator", "investigator", "scribe"]
+    assert {h["tool"] for h in hist.structured_content["steps"]} >= {"claim_incident", "record_finding", "resolve_incident"}
