@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-DATA_DIR = Path(os.environ.get("NEXTTRACE_DATA", Path(__file__).parent.parent / "data" / "RE1-OB"))
+DATA_DIR = Path(os.environ.get("NEXTTRACE_DATA", Path(__file__).parent.parent / "data" / "RE1-OB"))  # RCAEval RE1-OB
 
 
 @dataclass

@@ -1,7 +1,7 @@
 import pytest
 from falkordb import FalkorDB
 
-from nexttrace import data, topology
+from bench import rcaeval_data as data, boutique_topology as topology
 
 
 def test_map_is_consistent():
