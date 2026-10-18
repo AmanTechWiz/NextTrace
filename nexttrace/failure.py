@@ -194,13 +194,29 @@ def check_answer(g, connections: list, services: list = (), target: str = "") ->
     as stored: live on the map -> verified (with the map's own evidence); stale -> flagged; absent -> not_on_map.
     services: the services the answer names. Each must exist on the map; with `target`, each must also reach the target
     through the answer's own verified connections (so a claimed chain has to hold hop by hop), else unsupported.
+    A connection that quotes code ({file, line, quote}) has the quote checked in the mapped repo(s), the same check the
+    server applies to agent edits; a quote that isn't there is flagged as bad_evidence even when the call is real.
     ok is true only when nothing is flagged."""
-    pairs = []
+    from pathlib import Path
+    from nexttrace.mapper import verify_quote
+    roots = [Path(r[0]) for r in g.ro_query("MATCH (r:MapRun) WHERE r.root IS NOT NULL RETURN DISTINCT r.root").result_set]
+    pairs, bad = [], []
     for c in connections:
         a, b = (c.get("caller"), c.get("callee")) if isinstance(c, dict) else tuple(c)[:2]
         if not a or not b:
             raise ValueError(f"each connection needs a caller and a callee, got {c!r}")
         pairs.append((str(a), str(b)))
+        if isinstance(c, dict) and c.get("quote"):
+            why = "no mapped repo to check it against" if not roots else ""
+            for root in roots:
+                try:
+                    verify_quote(root, str(c.get("file", "")), int(c.get("line") or 0), str(c["quote"]), str(b), slack=5)
+                    why = ""
+                    break
+                except (ValueError, TypeError) as e:
+                    why = str(e)[:200]
+            if why:
+                bad.append({"caller": str(a), "callee": str(b), "file": c.get("file"), "line": c.get("line"), "reason": why})
     if target:
         _require(g, target)
     stored = {(r[0], r[1]): r[2:] for r in g.ro_query(
@@ -228,9 +244,9 @@ def check_answer(g, connections: list, services: list = (), target: str = "") ->
                     reach.add(c)
                     todo.append(c)
         unsupported = sorted(s for s in map(str, services) if s in names and s != target and s not in reach)
-    flagged = len(stale) + len(missing) + len(unknown) + len(unsupported)
+    flagged = len(stale) + len(missing) + len(unknown) + len(unsupported) + len(bad)
     return {"ok": flagged == 0, "verified": verified, "stale": stale, "not_on_map": missing,
-            "unknown_services": unknown, "unsupported_services": unsupported,
+            "unknown_services": unknown, "unsupported_services": unsupported, "bad_evidence": bad,
             "summary": f"{len(verified)} verified, {flagged} flagged"
                        + (f" ({len(missing)} not on map, {len(stale)} stale, {len(unknown)} unknown services, "
-                          f"{len(unsupported)} unsupported)" if flagged else "")}
+                          f"{len(unsupported)} unsupported, {len(bad)} bad evidence)" if flagged else "")}

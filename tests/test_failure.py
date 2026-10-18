@@ -292,3 +292,25 @@ def test_check_answer_edge_cases(g):
         failure.check_answer(g, [], services=["orders"], target="paymnts")
     with pytest.raises(ValueError, match="caller and a callee"):
         failure.check_answer(g, [{"caller": "orders"}])
+
+
+def test_check_answer_checks_quoted_code_in_the_mapped_repo(tmp_path):
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "client.py").write_text("import os\n\nURL = 'http://orders/api'\n")
+    db = FalkorDB()
+    graph = db.select_graph("test_check_quotes")
+    if "test_check_quotes" in db.list_graphs():
+        graph.delete()
+    try:
+        graph.query("CREATE (:MapRun {root: $r}), (:Service {name: 'web'})-[:CALLS {confidence: 'high', "
+                    "evidence: ['code | web/client.py:3 | x'], stale: false}]->(:Service {name: 'orders'})", {"r": str(tmp_path)})
+        good = {"caller": "web", "callee": "orders", "file": "web/client.py", "line": 3, "quote": "URL = 'http://orders/api'"}
+        assert failure.check_answer(graph, [good])["ok"]
+        wrong_line = dict(good, line=40)                                  # real call, invented location
+        made_up = dict(good, quote="OrdersClient.post('/api')")           # real call, invented code
+        outside = dict(good, file="../../etc/passwd", line=1)
+        got = failure.check_answer(graph, [wrong_line, made_up, outside])
+        assert len(got["verified"]) == 1 and len(got["bad_evidence"]) == 3 and not got["ok"]
+        assert "outside" in got["bad_evidence"][2]["reason"]
+    finally:
+        graph.delete()

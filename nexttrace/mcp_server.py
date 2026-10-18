@@ -670,7 +670,7 @@ def blast_radius(graph: str, service: str, max_depth: int = 6, include_stale: bo
 @_friendly
 def check_answer(graph: str, connections: list[dict[str, str]], services: list[str] | None = None, target: str = "") -> dict[str, Any]:
     """Run before giving an answer that names services or calls. connections: every call your answer relies on, as
-    {caller, callee}. services: every service it names; with target, each must reach the target through your verified
+    {caller, callee}, plus {file, line, quote} when you cite code (the quote is checked in the repo). services: every service it names; with target, each must reach the target through your verified
     connections. Returns verified calls with the map's evidence, and flags calls not on the map, stale calls, unknown
     services and unsupported claims. Drop or fix anything flagged before answering; ok=true means nothing was."""
     return _ask(failure.check_answer, graph, connections, services=services or [], target=target)
