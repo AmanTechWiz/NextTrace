@@ -20,3 +20,11 @@ roadmap.html
 # macOS
 .DS_Store
 
+
+# Local planning notes (not committed)
+BUILD_GUIDE.md
+instructions.md
+project_plan.md
+graph-db-explained.html
+DEMO_SCRIPT.txt
+DEMO_SPEECH.txt
