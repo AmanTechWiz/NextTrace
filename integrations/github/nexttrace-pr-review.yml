@@ -1,0 +1,56 @@
+# NextTrace PR review. Copy to .github/workflows/ in any repo.
+# Optional: add a GEMINI_API_KEY repository secret for the cited AI review (bring your own key; used only here).
+# Optional repository variables: NEXTTRACE_GEMINI_MODEL (default gemini-flash-latest),
+#   NEXTTRACE_GEMINI_RPM / NEXTTRACE_GEMINI_RPD (local cap for free-tier keys; unset = none).
+name: NextTrace PR review
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: nexttrace-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      falkordb:
+        image: falkordb/falkordb:latest
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - name: Get NextTrace
+        run: git clone --depth 1 "${NEXTTRACE_REPO:-https://github.com/AmanTechWiz/NextTrace}" "$RUNNER_TEMP/nexttrace"
+        env:
+          NEXTTRACE_REPO: ${{ vars.NEXTTRACE_REPO }}
+      - name: Wait for FalkorDB
+        run: for i in $(seq 30); do (echo > /dev/tcp/localhost/6379) 2>/dev/null && exit 0; sleep 1; done; exit 1
+      - name: Map the repo and review the change
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          NEXTTRACE_GEMINI_MODEL: ${{ vars.NEXTTRACE_GEMINI_MODEL }}
+          NEXTTRACE_GEMINI_RPM: ${{ vars.NEXTTRACE_GEMINI_RPM }}
+          NEXTTRACE_GEMINI_RPD: ${{ vars.NEXTTRACE_GEMINI_RPD }}
+        run: |
+          uv run --directory "$RUNNER_TEMP/nexttrace" python -m nexttrace.pr_review \
+            --repo "$GITHUB_WORKSPACE" --base "origin/${{ github.base_ref }}" --head HEAD --graph pr --map \
+            --repo-url "${{ github.server_url }}/${{ github.repository }}" \
+            --sha "${{ github.event.pull_request.head.sha }}" --out "$RUNNER_TEMP/comment.md"
+      - name: Post or update the review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+                 --jq '.[] | select(.body | contains("<!-- nexttrace-pr-review -->")) | .id' | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$RUNNER_TEMP/comment.md" > /dev/null
+          fi
