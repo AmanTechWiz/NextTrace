@@ -253,7 +253,7 @@ docker run -d --name falkordb -v falkordb_data:/var/lib/falkordb/data -p 6379:63
 
 **FalkorDB Cloud or another host:** set `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_USERNAME`, `FALKORDB_PASSWORD` and `FALKORDB_TLS` (the same names as the official FalkorDB MCP server) in the `env` block above, or as repository secrets for the PR bot.
 
-**Tests:** `uv run pytest` with FalkorDB running. On a fresh clone: 116 passed, 6 skipped (those need the benchmark repos under `data/repos/`).
+**Tests:** `uv run pytest` with FalkorDB running. On a fresh clone: 118 passed, 6 skipped (those need the benchmark repos under `data/repos/`).
 
 **Run the PR review on your machine:**
 
