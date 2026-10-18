@@ -282,3 +282,24 @@ def test_empty_model_variable_falls_back_to_default(repo, monkeypatch):
         return {"verdict": "review", "summary": "s", "findings": []}, {}
     pr_review.ai_review(g, pr_review.facts(g, ["payments/app.py"]), "", "review", key="k", call=call)
     assert seen["model"] == "gemini-flash-latest"
+
+
+def test_base_map_decides_what_this_pr_broke(repo):
+    root, g = repo
+    files, diff = change(root, "payments/app.py", FILES["payments/app.py"] + "# unrelated\n")
+    mapper.map_repo(root, GRAPH)
+    key = ("orders", "payments", "POST", "/pay")
+    # pretend /pay vanished in a way the diff text doesn't show (a class-level prefix, a moved file)
+    g.query("MATCH (e:Endpoint {path: '/pay'}) SET e.declared = false")
+    assert not pr_review.facts(g, files, diff)["broken"][0]["new"]                  # heuristic: no
+    assert pr_review.facts(g, files, diff, base=({key}, {key}))["broken"][0]["new"]  # worked on base: broken by this PR
+    assert not pr_review.facts(g, files, diff, base=(set(), {key}))["broken"][0]["new"]   # already broken on base
+
+
+def test_base_calls_maps_base_branch_and_cleans_up(repo):
+    root, _ = repo
+    change(root, "payments/app.py", FILES["payments/app.py"].replace("'/pay'", "'/v2/pay'"))
+    ok, every = pr_review.base_calls(root, "main", "test_pr_review_base")
+    assert ("orders", "payments", "POST", "/pay") in ok and ("web", "orders", "POST", "/orders") in ok
+    assert "test_pr_review_base" not in FalkorDB().list_graphs()
+    assert git(root, "worktree", "list").count("\n") == 1                             # temp worktree removed

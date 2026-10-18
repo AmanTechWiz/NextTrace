@@ -129,7 +129,9 @@ def _snippet(root, evidence, around=3):
     return "\n".join(text[max(0, n - 1 - around):n + around])
 
 
-def facts(g, files, diff="", root=None):
+def facts(g, files, diff="", root=None, base=None):
+    """base: (calls that matched a route before the change, all calls before), from a map of the base branch.
+    With it, "broken by this PR" is exact (worked before, fails now, or a new call); without it, a diff heuristic."""
     touched, unowned = changed_services(g, files)
     if root is None:
         r = g.ro_query("MATCH (r:MapRun) RETURN r.root ORDER BY r.run DESC LIMIT 1").result_set
@@ -159,6 +161,9 @@ def facts(g, files, diff="", root=None):
             "dependents": rank["dependents"], "rank": rank["rank"], "of": of, "kind": b["kind"], "betweenness": rank["betweenness"],
             "pagerank": rank["pagerank"], "entry_points_hit": b["entry_points_hit"],
             "owners_to_notify": b["owners_to_notify"],
+            # how each direct caller uses it: lets the reviewer (and the model) judge a contract change
+            "caller_code": [{"caller": a["service"], "code": _snippet(root, a["hops"][0]["evidence"])}
+                            for a in b["affected"] if a["depth"] == 1][:8],
             "affected": [{"service": a["service"], "owner": a["owner"], "depth": a["depth"], "path": a["path"],
                           "confidence": a["confidence"], "cites": [cid(h) for h in a["hops"]]} for a in b["affected"]],
             # what it calls: a change can also break how it uses its own dependencies
@@ -193,8 +198,10 @@ def facts(g, files, diff="", root=None):
             "ORDER BY e.service, e.path, c.name", {"s": names}).result_set:
         out["broken"].append({"id": f"B{len(out['broken']) + 1}", "service": svc, "caller": caller,
                               "route": f"{method} {path}".strip(), "evidence": ev or "", "code": _snippet(root, ev),
-                              # this PR's doing: it removed the route, or it added the call
-                              "new": (svc in touched and _in_diff(diff, path, "-"))
+                              # this PR's doing: it removed or moved the route, or it added the call
+                              "new": ((caller, svc, method, path) in base[0] or (caller, svc, method, path) not in base[1])
+                                     if base else
+                                     (svc in touched and _in_diff(diff, path, "-"))
                                      or (caller in touched and _in_diff(diff, path, "+"))})
     if names:
         for j, inc in enumerate(mem.similar_incidents(g, names, limit=5), 1):
@@ -255,7 +262,8 @@ Rules:
 - Read the callers' code: judge whether the diff actually breaks how they call (path, method, fields, response shape).
 - Findings: at most 4, each 1-2 sentences, naming the file or function. No finding is better than a vague one.
   For a safe or trivial change return no findings.
-- calls_to_missing_routes with new=true are calls to a route that this diff removes, renames or never existed: say so plainly.
+- calls_to_missing_routes with new=true worked before this change and fail after it (or are new calls to a route that
+  does not exist): say so plainly, naming the callers. direct_callers_code shows how callers use a changed service.
 - verdict: risky if the diff plausibly breaks a caller or repeats a past incident; review if dependents exist but the
   change looks compatible; safe if nothing depends on it.
 - summary: 1-3 plain sentences a busy reviewer reads first, like "This renames X in Y (File.java). Z and W still call
@@ -272,6 +280,7 @@ def _compact(f):
                           for a in s["affected"][:40]]} for s in f["services"]],
             "calls": [{k: c[k] for k in ("id", "caller", "callee", "evidence")} for c in f["connections"][:120]],
             "changed_functions": {s["service"]: s["changed_functions"] for s in f["services"] if s["changed_functions"]},
+            "direct_callers_code": {s["service"]: s["caller_code"] for s in f["services"] if s["caller_code"]},
             "calls_to_missing_routes": [{k: b[k] for k in ("id", "caller", "service", "route", "evidence", "new", "code")}
                                         for b in f["broken"]],
             "changed_routes": [{"id": r["id"], "service": r["service"], "route": r["route"], "handler": r["functions"],
@@ -560,8 +569,30 @@ def _git(root, *args):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
 
 
-def review_change(g, files, diff, repo_url="", sha="", use_ai=True, root=None):
-    f = facts(g, files, diff, root)
+def base_calls(root, base_ref, graph):
+    """Map the base branch in a temporary worktree: (calls that matched a declared route, all calls)."""
+    import shutil
+    import tempfile
+    from nexttrace import mapper
+    from nexttrace.graphdb import connect
+    tmp = Path(tempfile.mkdtemp(prefix="nexttrace-base-")) / "base"
+    db = connect()
+    _git(root, "worktree", "add", "--detach", "--quiet", str(tmp), base_ref)
+    try:
+        mapper.map_repo(tmp, graph)
+        rows = db.select_graph(graph).ro_query(
+            "MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint) WHERE NOT coalesce(x.stale, false) "
+            "RETURN c.name, e.service, e.method, e.path, coalesce(e.declared, false)").result_set
+        return {tuple(r[:4]) for r in rows if r[4]}, {tuple(r[:4]) for r in rows}
+    finally:
+        if graph in db.list_graphs():
+            db.select_graph(graph).delete()
+        subprocess.run(["git", "-C", str(root), "worktree", "remove", "--force", str(tmp)], capture_output=True)
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+
+
+def review_change(g, files, diff, repo_url="", sha="", use_ai=True, root=None, base=None):
+    f = facts(g, files, diff, root, base)
     rule_v, reasons = verdict(f)
     review, report = ai_review(g, f, diff, rule_v) if use_ai else (None, "AI disabled")
     if review is None:
@@ -589,7 +620,8 @@ def main(argv=None):
     files = [x for x in _git(root, "diff", "--name-only", f"{a.base}...{a.head}").splitlines() if x]
     diff = _git(root, "diff", f"{a.base}...{a.head}")
     sha = a.sha or _git(root, "rev-parse", a.head).strip()
-    comment, result = review_change(connect().select_graph(a.graph), files, diff, a.repo_url, sha, not a.no_ai, root)
+    base = base_calls(root, a.base, f"{a.graph}__base") if a.map else None
+    comment, result = review_change(connect().select_graph(a.graph), files, diff, a.repo_url, sha, not a.no_ai, root, base)
     if a.out:
         Path(a.out).write_text(comment)
     else:
