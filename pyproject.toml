@@ -3,6 +3,8 @@ name = "nexttrace"
 version = "0.1.0"
 description = "Finds which service failed first, who it hurts, and what fixed it last time, using a FalkorDB graph."
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "falkordb>=1.8.0",
     "mcp>=2.3",

@@ -524,7 +524,7 @@ All data is public or produced by this project. No personal or private data is u
 
 ## License
 
-TODO (author): no LICENSE file is in the repo yet. Add one (for example MIT or Apache-2.0) and update the badge.
+MIT. See [LICENSE](LICENSE). Use it, change it, ship it.
 
 ## Links
 
