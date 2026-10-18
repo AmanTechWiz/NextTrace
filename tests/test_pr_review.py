@@ -58,6 +58,7 @@ def change(root, path, text):
     (root / path).parent.mkdir(parents=True, exist_ok=True)
     (root / path).write_text(text)
     git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "change")
+    mapper.map_repo(root, GRAPH)  # like CI: the review reads the map of the PR head
     return [x for x in git(root, "diff", "--name-only", "main...pr").splitlines() if x], git(root, "diff", "main...pr")
 
 
@@ -82,16 +83,38 @@ def test_changed_files_map_to_services_and_unowned(repo):
 def test_route_with_callers_is_risky_with_cited_chain(repo):
     root, g = repo
     files, diff = change(root, "payments/app.py", FILES["payments/app.py"].replace("'/pay'", "'/v2/pay'"))
-    f = pr_review.facts(g, files)
+    f = pr_review.facts(g, files, diff)
     v, why = pr_review.verdict(f)
-    assert v == "risky" and any("POST /pay" in w for w in why)
+    # the old route is gone; orders still calls it: broken by this PR
+    assert v == "risky" and [(x["caller"], x["route"], x["new"]) for x in f["broken"]] == [("orders", "POST /pay", True)]
+    assert any("does not exist after this change" in w for w in why)
     assert [a["service"] for a in f["services"][0]["affected"]] == ["orders", "web"]   # multi-hop, nearest first
-    assert f["routes"][0]["callers"][0]["caller"] == "orders"
     ids = {c["id"] for c in f["connections"]}
     assert all(c in ids for a in f["services"][0]["affected"] for c in a["cites"])      # every hop is a cited fact
     comment, res = pr_review.review_change(g, files, diff, "https://github.com/o/r", "abc", use_ai=False)
     assert comment.startswith(pr_review.MARKER) and "🔴 Risky" in comment and "```mermaid" in comment
     assert "https://github.com/o/r/blob/abc/orders/app.py#L" in comment and res["verdict"] == "risky"
+
+
+def test_changed_route_that_keeps_its_path_lists_its_callers(repo):
+    root, g = repo
+    files, diff = change(root, "payments/app.py", FILES["payments/app.py"].replace("'ok'", "{'status': 'ok'}"))
+    f = pr_review.facts(g, files, diff)
+    assert not f["broken"] and f["routes"][0]["callers"][0]["caller"] == "orders"
+    assert pr_review.verdict(f)[0] == "risky"
+
+
+def test_older_mismatch_is_review_not_blamed_on_this_pr(repo):
+    root, g = repo
+    web = FILES["web/app.py"] + "\ndef old():\n    return requests.post('http://orders:5000/legacy-orders')\n"
+    (root / "web/app.py").write_text(web)
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "older bug")
+    mapper.map_repo(root, "test_pr_review")
+    files, diff = change(root, "orders/app.py", FILES["orders/app.py"] + "# comment only\n")
+    f = pr_review.facts(g, files, diff)
+    assert [(x["caller"], x["route"], x["new"]) for x in f["broken"]] == [("web", "POST /legacy-orders", False)]
+    v, why = pr_review.verdict(f)
+    assert any("does not declare" in w for w in why) and not any("after this change" in w for w in why)
 
 
 def test_leaf_docs_and_past_incident_verdicts(repo):
@@ -115,9 +138,12 @@ def fake_ai(review):
 
 def test_ai_findings_must_cite_facts_and_name_only_known_services(repo):
     root, g = repo
-    files, diff = change(root, "orders/app.py", FILES["orders/app.py"].replace("/pay", "/charge"))
-    f = pr_review.facts(g, files)
+    files, diff = change(root, "orders/app.py", FILES["orders/app.py"].replace("/pay'", "/charge'"))
+    f = pr_review.facts(g, files, diff)
     rule_v, _ = pr_review.verdict(f)
+    # orders now calls POST /charge, which payments doesn't have: a new broken call made by this PR
+    assert [(x["caller"], x["service"], x["route"], x["new"]) for x in f["broken"]] == [("orders", "payments", "POST /charge", True)]
+    assert rule_v == "risky"
     c = f["connections"][0]["id"]
     ai = {"verdict": "safe", "summary": "orders now calls a different payments route.", "findings": [
         {"severity": "high", "title": "payments route renamed", "detail": "web reaches this via orders.", "cites": [c, "S1"]},

@@ -56,10 +56,16 @@ def changed_services(g, files):
     return hit, unowned
 
 
-def facts(g, files):
+def _in_diff(diff, path, sign):
+    """Does the diff add (+) or delete (-) a line holding this route's last literal segment?"""
+    seg = next((x for x in reversed(path.split("/")) if x and "{" not in x and ":" not in x), "")
+    return bool(seg) and any(l.startswith(sign) and not l.startswith(sign * 3) and seg in l for l in diff.splitlines())
+
+
+def facts(g, files, diff=""):
     touched, unowned = changed_services(g, files)
     names = sorted(touched)[:MAX_SERVICES]
-    out = {"files": list(files), "unowned_files": unowned, "services": [], "connections": [], "routes": [],
+    out = {"files": list(files), "unowned_files": unowned, "services": [], "connections": [], "routes": [], "broken": [],
            "incidents": [], "truncated_services": max(0, len(touched) - MAX_SERVICES)}
     conns = {}
 
@@ -96,6 +102,19 @@ def facts(g, files):
             callers = [c for c in callers if c.get("caller")]
             out["routes"].append({"id": f"R{len(out['routes']) + 1}", "service": svc, "route": f"{method} {path}",
                                   "declared_at": e_path, "callers": callers})
+    # calls that match no declared route, into or out of a changed service: a removed or renamed route, a new call to
+    # a route that doesn't exist, or an older mismatch
+    for caller, method, path, svc, ev in g.ro_query(
+            "MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint) WHERE (e.service IN $s OR c.name IN $s) "
+            # undeclared on a fresh map; stale when a mapped-before route vanished
+            "AND (NOT coalesce(e.declared, true) OR coalesce(e.stale, false)) "
+            "AND NOT coalesce(x.stale, false) RETURN c.name, e.method, e.path, e.service, x.evidence[0] "
+            "ORDER BY e.service, e.path, c.name", {"s": names}).result_set:
+        out["broken"].append({"id": f"B{len(out['broken']) + 1}", "service": svc, "caller": caller,
+                              "route": f"{method} {path}".strip(), "evidence": ev or "",
+                              # this PR's doing: it removed the route, or it added the call
+                              "new": (svc in touched and _in_diff(diff, path, "-"))
+                                     or (caller in touched and _in_diff(diff, path, "+"))})
     if names:
         for j, inc in enumerate(mem.similar_incidents(g, names, limit=5), 1):
             out["incidents"].append({"id": f"I{j}", **{k: inc[k] for k in
@@ -107,6 +126,10 @@ def facts(g, files):
 def verdict(f):
     """Rules over the facts, with the reasons that triggered them."""
     why = []
+    for b in f["broken"]:
+        why.append(("risky", f"{b['caller']} calls {b['route']} on {b['service']}, which does not exist after this change ({b['id']})")
+                   if b["new"] else
+                   ("review", f"{b['caller']} calls {b['route']} on {b['service']}, which it does not declare ({b['id']})"))
     for r in f["routes"]:
         if r["callers"]:
             why.append(("risky", f"{r['route']} ({r['id']}) changed and {len(r['callers'])} other service(s) call it"))
@@ -146,6 +169,7 @@ Rules:
 - Every finding must cite the fact ids it relies on in `cites`. A finding without facts behind it will be discarded.
 - Name only services that appear in FACTS. Never invent services, calls, files or incidents.
 - Prefer few, specific findings (at most 6) over many vague ones. Say what to check, where, and why.
+- calls_to_missing_routes with new=true are calls to a route that this diff removes, renames or never existed: say so plainly.
 - verdict: risky if the diff plausibly breaks a caller or repeats a past incident; review if dependents exist but the
   change looks compatible; safe if nothing depends on it. The summary is 2-3 plain sentences for the reviewer."""
 
@@ -157,6 +181,8 @@ def _compact(f):
              "affected": [{"service": a["service"], "depth": a["depth"], "path": a["path"], "cites": a["cites"]}
                           for a in s["affected"][:40]]} for s in f["services"]],
             "calls": [{k: c[k] for k in ("id", "caller", "callee", "evidence")} for c in f["connections"][:120]],
+            "calls_to_missing_routes": [{k: b[k] for k in ("id", "caller", "service", "route", "evidence", "new")}
+                                        for b in f["broken"]],
             "changed_routes": [{"id": r["id"], "service": r["service"], "route": r["route"],
                                 "callers": [c["caller"] for c in r["callers"]]} for r in f["routes"]],
             "past_incidents": [{k: i[k] for k in ("id", "incident", "title", "cause", "fix", "worked")}
@@ -211,9 +237,9 @@ def call_gemini(prompt, key, model, rpm=0, rpd=0, retries=2, post=_post, gate=_r
 def check_ai(g, f, ai, rule_verdict):
     """Keep only what the graph backs. Returns (clean review, report of what was dropped)."""
     ids = ({s["id"] for s in f["services"]} | {c["id"] for c in f["connections"]} | {r["id"] for r in f["routes"]}
-           | {i["id"] for i in f["incidents"]})
+           | {i["id"] for i in f["incidents"]} | {b["id"] for b in f["broken"]})
     allowed = ({s["service"] for s in f["services"]} | {a["service"] for s in f["services"] for a in s["affected"]}
-               | {c["service"] for s in f["services"] for c in s["calls"]}
+               | {c["service"] for s in f["services"] for c in s["calls"]} | {b["caller"] for b in f["broken"]}
                | {c["caller"] for r in f["routes"] for c in r["callers"]} | {i["cause"] for i in f["incidents"]})
     known = {r[0] for r in g.ro_query("MATCH (s:Service) RETURN s.name").result_set}
 
@@ -312,6 +338,12 @@ def render(f, rule_v, reasons, review=None, report=None, repo_url="", sha=""):
         for x in review["findings"]:
             L.append(f"- **{x['severity'].upper()}: {x['title']}** {x['detail']} " + " ".join(f"`{c}`" for c in x["cites"]))
         L.append("")
+    if f["broken"]:
+        L += ["### Calls to routes that no longer exist" if any(b["new"] for b in f["broken"])
+              else "### Calls that match no declared route", ""]
+        L += [f"- `{b['caller']}` calls `{b['route']}` on `{b['service']}` ({b['id']}"
+              + (", broken by this PR" if b["new"] else ", already unmatched") + f") at {_link(b['evidence'], repo_url, sha)}"
+              for b in f["broken"]] + [""]
     for r in f["routes"]:
         if r["callers"]:
             L += [f"### Changed route `{r['route']}` ({r['id']}) is called by", ""]
@@ -360,7 +392,7 @@ def _git(root, *args):
 
 
 def review_change(g, files, diff, repo_url="", sha="", use_ai=True):
-    f = facts(g, files)
+    f = facts(g, files, diff)
     rule_v, reasons = verdict(f)
     review, report = ai_review(g, f, diff, rule_v) if use_ai else (None, "AI disabled")
     if review is None:
