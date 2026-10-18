@@ -8,7 +8,7 @@
 [![GitHub Actions](https://img.shields.io/badge/PR%20bot-GitHub%20Actions-1f2937?style=for-the-badge&logo=githubactions&logoColor=white)](integrations/github/nexttrace-pr-review.yml)
 [![License](https://img.shields.io/badge/license-TODO-6b7280?style=for-the-badge)](#license)
 [![Hackathon](https://img.shields.io/badge/Graph%20Hacks-WeMakeDevs%20x%20FalkorDB-7c3aed?style=for-the-badge)](https://www.wemakedevs.org/hackathons/falkordb)
-[![Tracks](https://img.shields.io/badge/Tracks-1%20%2B%202-7c3aed?style=for-the-badge)](#hackathon-tracks)
+[![Tracks](https://img.shields.io/badge/Tracks-1%20%2B%202-7c3aed?style=for-the-badge)](#tracks-entered)
 
 > **TODO (author):** add a demo GIF or screenshot of the graph view here, for example `docs/media/demo.gif`.
 >
@@ -46,23 +46,6 @@ If FalkorDB were removed, the product would stop working. These are not lookups 
 | Memory | Incidents, fixes and agent steps are nodes linked to the real `Service` nodes, so "similar past incident" is a graph overlap | [`nexttrace/memory.py`](nexttrace/memory.py) |
 
 We also measured what happens without it: the same AI agent answering from memory alone invented 41 of its 42 code citations ([details](#results)).
-
-## Hackathon tracks
-
-Entered in **Track 1 (Agents That Act on Connected Data)** and **Track 2 (Agent Memory and Coordination)**.
-
-| Theme | How NextTrace does it |
-|---|---|
-| The graph shapes the agent's decisions | Agents call `blast_radius`, `failure_paths` and `criticality`; the PR verdict is set by rules over graph facts, and the AI can raise it but never lower it |
-| Multi-hop reasoning | Impact chains up to 6 hops; on one chain question the plain agent found 4 of 6 services, NextTrace 6 of 6 |
-| Graph queries and algorithms as agent tools | 31 MCP tools, including FalkorDB PageRank and betweenness, plus a read-only Cypher tool |
-| Tool selection through MCP | Claude Code (or any MCP client) picks the tools; mapping itself is deterministic and costs no tokens |
-| Traceable, explainable decisions | Every connection, finding and PR note links to a `file:line`; `check_answer` flags anything the map does not back up |
-| Episodic, semantic and procedural memory | Incidents (episodic), the service map (semantic), runbooks with success counts (procedural) |
-| Persistent conversation history | Every agent session and tool step is stored as `Session` and `Step` nodes, readable by later agents |
-| Shared state and handoffs | Incidents move `open → investigating → diagnosed → resolved` through version-checked claims; exactly one racing agent wins |
-| High-concurrency reads and writes | Unique constraints plus `MERGE` keep parallel writers from duplicating; tested with 30 parallel triage agents (1 incident) and 20 racing claims (1 winner) |
-| Separate memory per tenant | One graph per team or system; isolation is tested |
 
 ## Architecture
 
@@ -106,145 +89,31 @@ flowchart LR
 - **The MCP server** ([`nexttrace/mcp_server.py`](nexttrace/mcp_server.py)) exposes everything to the agent the user already runs. No model runs inside NextTrace for these tools.
 - **The PR bot** ([`integrations/github/nexttrace-pr-review.yml`](integrations/github/nexttrace-pr-review.yml)) starts FalkorDB as a service container, maps the PR head, and posts or updates one comment. The only place NextTrace calls a model is here, with the user's own Gemini key, and it works without one.
 
-## Graph data model
+## Submission checklist
 
-```mermaid
-flowchart LR
-  classDef map fill:#ede9fe,stroke:#6d28d9,color:#111111
-  classDef mem fill:#fef3c7,stroke:#b45309,color:#111111
+Everything the hackathon asks the README to include, in one place.
 
-  S["Service"]:::map
-  E["Endpoint"]:::map
-  R["MapRun"]:::map
-  A["Alarm"]:::mem
-  I["Incident"]:::mem
-  B["Runbook"]:::mem
-  V["Event"]:::mem
-  X["Session"]:::mem
-  T["Step"]:::mem
+### Tracks entered
 
-  S -- CALLS --> S
-  S -- EXPOSES --> E
-  S -- CALLS_ENDPOINT --> E
-  A -- ON --> S
-  I -- HAS_ALARM --> A
-  I -- AFFECTS --> S
-  I -- CAUSED_BY --> S
-  I -- FIXED_BY --> B
-  V -- OF --> I
-  T -- IN --> X
-```
+**Track 1: Agents That Act on Connected Data** and **Track 2: Agent Memory and Coordination.**
 
-`MapRun` records each mapping run (repo, root, commit) and stands alone.
+**Track 1: the graph decides what the agent does**
 
-<details>
-<summary>Key properties</summary>
+- **It follows connections several steps away.** Ask "what breaks if the payments service goes down?" and NextTrace walks the map outward, caller by caller, up to six steps, and returns every affected service with the chain that links it. In our benchmark an agent without the map stopped at the first ring and found 4 of 6 affected services; with the map it found all 6. ([`failure.py`](nexttrace/failure.py))
+- **The agent picks graph tools on its own.** Through MCP, Claude Code or any other agent chooses between 31 tools: impact, paths, rankings, gap finding, incidents. The ranking tool runs FalkorDB's own PageRank and betweenness algorithms to tell which services everything else leans on. ([`mcp_server.py`](nexttrace/mcp_server.py))
+- **It acts on what the graph shows.** On every pull request the bot looks up who calls the code being changed and posts a verdict: safe, review or risky. On three deliberately tricky PRs (an API prefix bump, a GET changed to POST, a removed endpoint) it named every service that would break: 7, 6 and 4 callers. ([`pr_review.py`](nexttrace/pr_review.py), [live PRs](https://github.com/AmanTechWiz/train-ticket/pulls))
+- **Every answer can be traced.** Each connection carries the file and line it came from, and every name in a PR review links to that line. A checker compares any agent answer with the map before it is trusted; it caught all 41 made-up citations in our test and flagged nothing in the honest answers. ([`failure.py`](nexttrace/failure.py))
+- **The AI cannot override the facts.** Gemini writes the PR review in plain words, but a note without graph evidence is thrown away, and the AI may raise the risk level but never lower it. ([`pr_review.py`](nexttrace/pr_review.py))
 
-| Element | Properties |
-|---|---|
-| `Service` | `name` (unique), `kind` (service, datastore, infra, other), `source_dir`, `declared_in`, `owner`, `repo`, `origin` (scanner or ai), `images`, `stale` |
-| `CALLS` | `sources` (trace, config, code, ai), `confidence` (high, medium, inferred), `evidence[]` (`kind \| file:line \| quote`), `evidence_count`, `last_run`, `stale` |
-| `Endpoint` | `key` (unique), `service`, `method`, `path`, `where` (`file:line`), `declared`, `stale` |
-| `CALLS_ENDPOINT` | `evidence[]`, `matched` (the call fits a declared route) |
-| `MapRun` | `run`, `repo`, `root`, `commit`, `services`, `calls` |
-| `Alarm` | `key` (unique), `service`, `signal`, `at` |
-| `Incident` | `id`, `key` (unique), `title`, `status`, `version`, `owner`, `reason`, `evidence[]`, `fix` |
-| `Runbook` | `key` (unique), `steps`, `attempts`, `successes` |
-| `Event` | `seq`, `at`, `agent`, `action`, `from_status`, `to_status`, `note` |
-| `Session` / `Step` | `id`, `agent`, `task` / `seq`, `at`, `tool`, `input`, `output`, `incident` |
+**Track 2: memory that lasts and is shared between agents**
 
-One graph per team or system. Unique constraints on `Service.name`, `Endpoint.key`, `Alarm.key`, `Incident.key`, `Runbook.key` and `Session.id` are created before any agent writes.
+- **Three kinds of memory in one graph.** What happened (incidents), what is true about the system (the service map) and what worked before (fixes with a success count). They sit next to the real services, so "have we seen this before?" is one lookup. ([`memory.py`](nexttrace/memory.py))
+- **Agents hand work to each other through the graph.** A triage agent opens an incident, an investigator claims it and records the cause, a scribe records the fix. In our trial these were three separate Claude sessions sharing nothing but the graph; they found the real cause in 3 of 3 recorded failures, and the second time a fault repeated, the stored fix was reused. ([trial log](docs/agent_trial.md))
+- **Safe when many agents work at once.** Thirty agents reporting the same alarms open one incident, not thirty; twenty agents racing to claim it produce exactly one winner. Both are tested. ([`memory.py`](nexttrace/memory.py), [`test_memory.py`](tests/test_memory.py))
+- **History survives restarts.** Every agent session and step is stored, so a new agent next week can read what earlier agents did and why. ([`memory.py`](nexttrace/memory.py))
+- **Each team gets its own memory.** One graph per team or system, kept apart in the same FalkorDB. ([`test_memory.py`](tests/test_memory.py))
 
-</details>
-
-## Key Cypher queries
-
-**What breaks if a service fails?** Every caller up to 6 hops away, its shortest chain, and the evidence for every hop. Removed calls are skipped.
-
-```cypher
-MATCH (s:Service {name: $n})
-MATCH p = (x:Service)-[:CALLS*1..6]->(s)
-WHERE x <> s AND all(r IN relationships(p) WHERE NOT coalesce(r.stale, false))
-WITH x, p ORDER BY length(p), [n IN nodes(p) | n.name]
-WITH x, collect(p)[0] AS p
-RETURN x.name, x.owner, length(p),
-       [i IN range(0, length(p) - 1) | {caller: nodes(p)[i].name, callee: nodes(p)[i + 1].name,
-        confidence: relationships(p)[i].confidence, evidence: relationships(p)[i].evidence[0]}]
-```
-
-**Which services matter most?** FalkorDB's built-in algorithms, run over the whole map.
-
-```cypher
-CALL algo.pageRank('Service', 'CALLS') YIELD node, score RETURN node.name, score;
-CALL algo.betweenness({nodeLabels: ['Service'], relationshipTypes: ['CALLS'], samplingSize: $n, samplingSeed: 1})
-YIELD node, score RETURN node.name, score
-```
-
-**Who calls a route that no longer exists?** The PR bot's strongest signal: calls into or out of the changed services that match no declared route.
-
-```cypher
-MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint)
-WHERE (e.service IN $s OR c.name IN $s)
-  AND (NOT coalesce(e.declared, true) OR coalesce(e.stale, false))
-  AND NOT coalesce(x.stale, false)
-RETURN c.name, e.method, e.path, e.service, x.evidence[0]
-```
-
-**Hand an incident to the next agent.** Compare and swap on a version number, so exactly one of several racing agents wins.
-
-```cypher
-MATCH (i:Incident {id: $id}) WHERE i.status = $from AND i.version = $v
-SET i.status = $to, i.version = $v + 1, i.owner = $agent, i.updated_at = $at
-RETURN i.version
-```
-
-**Is this answer backed by the map?** Every call an agent's answer relies on, looked up as stored.
-
-```cypher
-UNWIND $p AS p
-MATCH (a:Service {name: p[0]})-[c:CALLS]->(b:Service {name: p[1]})
-RETURN a.name, b.name, c.confidence, c.evidence[0], coalesce(c.stale, false)
-```
-
-## Demo
-
-### PR review on a real repo (live)
-
-[AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket) is a fork of the public [Train Ticket](https://github.com/FudanSELab/train-ticket) system (40+ Java services) with the NextTrace workflow installed.
-
-1. [PR #1](https://github.com/AmanTechWiz/train-ticket/pull/1) renames one route in `ts-seat-service`: `/seats/left_tickets` becomes `/seats/remaining_tickets`.
-2. The workflow maps the repo in FalkorDB, finds the changed handler (`getLeftTicketOfInterval`), and sees three services whose code still calls the old path.
-3. **The live moment:** the bot comments **Risky · Breaks 3 caller(s)**, names `ts-travel-service`, `ts-travel2-service` and `ts-travel-plan-service`, links each to the exact line that will fail, and Gemini explains it in plain words with a fix.
-4. [PR #2](https://github.com/AmanTechWiz/train-ticket/pull/2) only edits the README. The bot says **Safe** in two lines.
-
-Measured on these runs: about 35 seconds per workflow run, one Gemini request of about 4.5k tokens for PR #1, none for PR #2.
-
-### Three agents, one graph, real failures
-
-Three separate Claude Code sessions (triage, investigator, scribe) shared nothing but the graph and worked three failures recorded in the public RCAEval dataset. The investigator found the cause in 3 of 3 cases, where blaming the loudest alarm was wrong in 3 of 3. The second failure repeated the first one's fault, and the scribe reused the stored fix. Total cost $1.04. This is a demonstration on three cases, not a benchmark. [Full log](docs/agent_trial.md).
-
-### Results
-
-All numbers come from saved runs in [`bench/results/`](bench/results/), with the misses published.
-
-| What we measured | How | Result |
-|---|---|---|
-| Is the map right? | Compared with 1.1M recorded real calls (RCAEval RE2, 15 runs) | Train Ticket 55/55 service calls and 63/63 route calls found; Online Boutique 9/9 and 11/11. [Report](docs/map_report.md) |
-| Does it generalize? | 8 repos not used during development; answer key written from the authors' own docs before running; code frozen | Scanner alone 36/74 documented connections (49%); scanner plus a Claude Code agent using the gap tools 57/74 (77%). [Report](docs/generalization.md), [agent run](docs/generalization_agent.md) |
-| Does the agent need it? | Claude Sonnet 5.5 (medium effort), 8 dependency questions on Train Ticket, citations checked against the code | Alone: 28/40 known callers, 41 of 42 citations invented. With code search: 38/40. With NextTrace: 40/40, 0 invented. Graph alone, no model: 40/40 in milliseconds. [Report](docs/agent_bench.md) |
-| Does the checker catch bad answers? | `check_answer` run on every answer above | Flagged exactly the 41 invented citations and nothing in the honest answers |
-
-<details>
-<summary>How to read these numbers honestly</summary>
-
-- The "alone" setup ran on Train Ticket, a public repo the model has likely seen in training, so its 28/40 is partly memory. Its invented file and line numbers are the finding.
-- "Graph alone" answers questions that were turned into function calls by hand; it does not understand free text.
-- A second agent run on the same 8 repos reached 69/74 after we improved the tools, but those repos were no longer unseen, so it is not reported as a score.
-- The incident trial is three cases. Fixes were not applied to a running system; `worked` records the agent's decision.
-
-</details>
-
-## Quick start
+### Setup
 
 Needs Docker and [uv](https://docs.astral.sh/uv/). These five commands were run on a fresh clone.
 
@@ -302,6 +171,152 @@ uv run python -m nexttrace.pr_review --repo ../your-repo --base origin/main --gr
 
 </details>
 
+### Graph data model
+
+```mermaid
+flowchart LR
+  classDef map fill:#ede9fe,stroke:#6d28d9,color:#111111
+  classDef mem fill:#fef3c7,stroke:#b45309,color:#111111
+
+  S["Service"]:::map
+  E["Endpoint"]:::map
+  R["MapRun"]:::map
+  A["Alarm"]:::mem
+  I["Incident"]:::mem
+  B["Runbook"]:::mem
+  V["Event"]:::mem
+  X["Session"]:::mem
+  T["Step"]:::mem
+
+  S -- CALLS --> S
+  S -- EXPOSES --> E
+  S -- CALLS_ENDPOINT --> E
+  A -- ON --> S
+  I -- HAS_ALARM --> A
+  I -- AFFECTS --> S
+  I -- CAUSED_BY --> S
+  I -- FIXED_BY --> B
+  V -- OF --> I
+  T -- IN --> X
+```
+
+`MapRun` records each mapping run (repo, root, commit) and stands alone.
+
+<details>
+<summary>Key properties</summary>
+
+| Element | Properties |
+|---|---|
+| `Service` | `name` (unique), `kind` (service, datastore, infra, other), `source_dir`, `declared_in`, `owner`, `repo`, `origin` (scanner or ai), `images`, `stale` |
+| `CALLS` | `sources` (trace, config, code, ai), `confidence` (high, medium, inferred), `evidence[]` (`kind \| file:line \| quote`), `evidence_count`, `last_run`, `stale` |
+| `Endpoint` | `key` (unique), `service`, `method`, `path`, `where` (`file:line`), `declared`, `stale` |
+| `CALLS_ENDPOINT` | `evidence[]`, `matched` (the call fits a declared route) |
+| `MapRun` | `run`, `repo`, `root`, `commit`, `services`, `calls` |
+| `Alarm` | `key` (unique), `service`, `signal`, `at` |
+| `Incident` | `id`, `key` (unique), `title`, `status`, `version`, `owner`, `reason`, `evidence[]`, `fix` |
+| `Runbook` | `key` (unique), `steps`, `attempts`, `successes` |
+| `Event` | `seq`, `at`, `agent`, `action`, `from_status`, `to_status`, `note` |
+| `Session` / `Step` | `id`, `agent`, `task` / `seq`, `at`, `tool`, `input`, `output`, `incident` |
+
+One graph per team or system. Unique constraints on `Service.name`, `Endpoint.key`, `Alarm.key`, `Incident.key`, `Runbook.key` and `Session.id` are created before any agent writes.
+
+</details>
+
+### Cypher queries and algorithms
+
+**What breaks if a service fails?** Every caller up to 6 hops away, its shortest chain, and the evidence for every hop. Removed calls are skipped.
+
+```cypher
+MATCH (s:Service {name: $n})
+MATCH p = (x:Service)-[:CALLS*1..6]->(s)
+WHERE x <> s AND all(r IN relationships(p) WHERE NOT coalesce(r.stale, false))
+WITH x, p ORDER BY length(p), [n IN nodes(p) | n.name]
+WITH x, collect(p)[0] AS p
+RETURN x.name, x.owner, length(p),
+       [i IN range(0, length(p) - 1) | {caller: nodes(p)[i].name, callee: nodes(p)[i + 1].name,
+        confidence: relationships(p)[i].confidence, evidence: relationships(p)[i].evidence[0]}]
+```
+
+**Which services matter most?** FalkorDB's built-in algorithms, run over the whole map.
+
+```cypher
+CALL algo.pageRank('Service', 'CALLS') YIELD node, score RETURN node.name, score;
+CALL algo.betweenness({nodeLabels: ['Service'], relationshipTypes: ['CALLS'], samplingSize: $n, samplingSeed: 1})
+YIELD node, score RETURN node.name, score
+```
+
+**Who calls a route that no longer exists?** The PR bot's strongest signal: calls into or out of the changed services that match no declared route.
+
+```cypher
+MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint)
+WHERE (e.service IN $s OR c.name IN $s)
+  AND (NOT coalesce(e.declared, true) OR coalesce(e.stale, false))
+  AND NOT coalesce(x.stale, false)
+RETURN c.name, e.method, e.path, e.service, x.evidence[0]
+```
+
+**Hand an incident to the next agent.** Compare and swap on a version number, so exactly one of several racing agents wins.
+
+```cypher
+MATCH (i:Incident {id: $id}) WHERE i.status = $from AND i.version = $v
+SET i.status = $to, i.version = $v + 1, i.owner = $agent, i.updated_at = $at
+RETURN i.version
+```
+
+**Is this answer backed by the map?** Every call an agent's answer relies on, looked up as stored.
+
+```cypher
+UNWIND $p AS p
+MATCH (a:Service {name: p[0]})-[c:CALLS]->(b:Service {name: p[1]})
+RETURN a.name, b.name, c.confidence, c.evidence[0], coalesce(c.stale, false)
+```
+
+### AI assistants used
+
+As the hackathon rules require:
+
+- **Claude Code** (Anthropic's coding assistant, Claude models) was used to write most of the code, run experiments and draft documentation, working under the author's direction. The author chose the idea, the scope and the evaluation rules (code frozen before unseen tests, answer keys written from authors' docs before running, honest reporting of misses), and reviewed the results.
+- **Claude Sonnet 5.5** was the agent under test in the benchmarks and the incident trial, run headless through Claude Code.
+- **Gemini** (`gemini-flash-latest`) is part of the product: it writes the optional PR review text, which is checked against the graph before posting.
+
+## Demo
+
+### PR review on a real repo (live)
+
+[AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket) is a fork of the public [Train Ticket](https://github.com/FudanSELab/train-ticket) system (40+ Java services) with the NextTrace workflow installed.
+
+1. [PR #1](https://github.com/AmanTechWiz/train-ticket/pull/1) renames one route in `ts-seat-service`: `/seats/left_tickets` becomes `/seats/remaining_tickets`.
+2. The workflow maps the repo in FalkorDB, finds the changed handler (`getLeftTicketOfInterval`), and sees three services whose code still calls the old path.
+3. **The live moment:** the bot comments **Risky · Breaks 3 caller(s)**, names `ts-travel-service`, `ts-travel2-service` and `ts-travel-plan-service`, links each to the exact line that will fail, and Gemini explains it in plain words with a fix.
+4. [PR #2](https://github.com/AmanTechWiz/train-ticket/pull/2) only edits the README. The bot says **Safe** in two lines.
+
+Measured on these runs: about 35 seconds per workflow run, one Gemini request of about 4.5k tokens for PR #1, none for PR #2.
+
+### Three agents, one graph, real failures
+
+Three separate Claude Code sessions (triage, investigator, scribe) shared nothing but the graph and worked three failures recorded in the public RCAEval dataset. The investigator found the cause in 3 of 3 cases, where blaming the loudest alarm was wrong in 3 of 3. The second failure repeated the first one's fault, and the scribe reused the stored fix. Total cost $1.04. This is a demonstration on three cases, not a benchmark. [Full log](docs/agent_trial.md).
+
+### Results
+
+All numbers come from saved runs in [`bench/results/`](bench/results/), with the misses published.
+
+| What we measured | How | Result |
+|---|---|---|
+| Is the map right? | Compared with 1.1M recorded real calls (RCAEval RE2, 15 runs) | Train Ticket 55/55 service calls and 63/63 route calls found; Online Boutique 9/9 and 11/11. [Report](docs/map_report.md) |
+| Does it generalize? | 8 repos not used during development; answer key written from the authors' own docs before running; code frozen | Scanner alone 36/74 documented connections (49%); scanner plus a Claude Code agent using the gap tools 57/74 (77%). [Report](docs/generalization.md), [agent run](docs/generalization_agent.md) |
+| Does the agent need it? | Claude Sonnet 5.5 (medium effort), 8 dependency questions on Train Ticket, citations checked against the code | Alone: 28/40 known callers, 41 of 42 citations invented. With code search: 38/40. With NextTrace: 40/40, 0 invented. Graph alone, no model: 40/40 in milliseconds. [Report](docs/agent_bench.md) |
+| Does the checker catch bad answers? | `check_answer` run on every answer above | Flagged exactly the 41 invented citations and nothing in the honest answers |
+
+<details>
+<summary>How to read these numbers honestly</summary>
+
+- The "alone" setup ran on Train Ticket, a public repo the model has likely seen in training, so its 28/40 is partly memory. Its invented file and line numbers are the finding.
+- "Graph alone" answers questions that were turned into function calls by hand; it does not understand free text.
+- A second agent run on the same 8 repos reached 69/74 after we improved the tools, but those repos were no longer unseen, so it is not reported as a score.
+- The incident trial is three cases. Fixes were not applied to a running system; `worked` records the agent's decision.
+
+</details>
+
 ## Live deployment and video
 
 - **Live:** the PR bot runs on every pull request in [AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket/pulls). There is no hosted web app; the rules allow local setup instead, and the steps above take about five minutes.
@@ -310,14 +325,6 @@ uv run python -m nexttrace.pr_review --repo ../your-repo --base origin/main --gr
 ## Tech stack
 
 FalkorDB · Python 3.12 · [MCP Python SDK](https://py.sdk.modelcontextprotocol.io/) · GitHub Actions · Gemini API (optional, PR reviews only) · pytest · uv
-
-## AI disclosure
-
-As the hackathon rules require:
-
-- **Claude Code** (Anthropic's coding assistant, Claude models) was used to write most of the code, run experiments and draft documentation, working under the author's direction. The author chose the idea, the scope and the evaluation rules (code frozen before unseen tests, answer keys written from authors' docs before running, honest reporting of misses), and reviewed the results.
-- **Claude Sonnet 5.5** was the agent under test in the benchmarks and the incident trial, run headless through Claude Code.
-- **Gemini** (`gemini-flash-latest`) is part of the product: it writes the optional PR review text, which is checked against the graph before posting.
 
 ## Limitations and what's next
 
