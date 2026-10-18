@@ -132,20 +132,117 @@ Everything the hackathon asks the README to include, in one place.
 
 ### Setup
 
-Needs Docker and [uv](https://docs.astral.sh/uv/). These five commands were run on a fresh clone.
+NextTrace plugs into your workflow in two independent ways. Use one or both:
+
+| | What you get | Needs a key? |
+|---|---|---|
+| **A. MCP tools** in your AI agent (Claude Code, Cursor, any MCP client) | Your agent maps your repo and answers "what breaks if X changes?" from a verified graph | No. NextTrace calls no model; your agent does the thinking on your own plan. |
+| **B. PR bot** in GitHub Actions | Every pull request gets a review: what changed, who breaks, the exact lines | Optional: a Gemini key for the written summary. Without it you get the rule-based review. |
+
+**Keys and accounts, all of them:**
+
+| Key | Required? | Where it goes | Used for |
+|---|---|---|---|
+| FalkorDB | No key locally | Docker on your machine. For FalkorDB Cloud set `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_USERNAME`, `FALKORDB_PASSWORD`, `FALKORDB_TLS` | The graph |
+| Anthropic or any agent subscription | Only what your agent already uses | Your agent, not NextTrace | The agent that calls the MCP tools |
+| `GEMINI_API_KEY` | Optional | GitHub repository secret | The PR bot's written review only. No key means the rule-based review. |
+| GitHub token | Automatic | Provided by GitHub Actions | Posting the PR comment |
+
+#### 1. Prerequisites
+
+[Docker](https://docs.docker.com/get-docker/), [uv](https://docs.astral.sh/uv/getting-started/installation/), git, and an MCP client such as [Claude Code](https://www.anthropic.com/claude-code). Python 3.12 is installed by uv.
+
+#### 2. Start FalkorDB and install NextTrace
 
 ```bash
 docker run -d --name falkordb -p 6379:6379 -p 3000:3000 falkordb/falkordb:latest
-git clone https://github.com/AmanTechWiz/NextTrace && cd NextTrace && uv sync
-git clone --depth 1 https://github.com/GoogleCloudPlatform/microservices-demo ../boutique
-uv run python -m nexttrace.mapper ../boutique --graph boutique
+git clone https://github.com/AmanTechWiz/NextTrace
+cd NextTrace && uv sync && pwd
+```
+
+Keep the path that `pwd` prints. Below it is called `/path/to/NextTrace`. The FalkorDB Browser is at http://localhost:3000.
+
+#### 3. A: Use the MCP tools on your own repo
+
+Run this inside **your** repo. It registers NextTrace for that project:
+
+```bash
+cd /path/to/your-repo
+claude mcp add nexttrace -s project \
+  -e FALKORDB_HOST=localhost -e FALKORDB_PORT=6379 \
+  -- uv --directory /path/to/NextTrace run python -m nexttrace.mcp_server
+```
+
+Then open your agent and ask in plain English:
+
+```bash
 claude
 ```
 
-The last command opens Claude Code in this folder. Approve the `nexttrace` MCP server from [`.mcp.json`](.mcp.json), then ask, for example, *"In graph boutique, what breaks if cartservice fails?"* You can also browse the graph at http://localhost:3000.
+> Map this repo with NextTrace into a graph called myapp, then tell me what breaks if the payments service fails.
+
+Inside Claude Code, `/mcp` should list `nexttrace` as connected. Your agent maps the repo (no model involved in the mapping), then answers from the graph, citing a file and line for each connection. After that, questions like "who calls the order service?" or "is it safe to change this endpoint?" use the graph first.
+
+Other MCP clients (Cursor, Claude Desktop and others) take the same server as JSON:
+
+```json
+{
+  "mcpServers": {
+    "nexttrace": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/NextTrace", "run", "python", "-m", "nexttrace.mcp_server"],
+      "env": { "FALKORDB_HOST": "localhost", "FALKORDB_PORT": "6379" }
+    }
+  }
+}
+```
+
+Prefer no agent for the mapping? Map from the command line, then ask your agent about the graph:
+
+```bash
+cd /path/to/NextTrace
+uv run python -m nexttrace.mapper /path/to/your-repo --graph myapp
+```
+
+#### 4. B: Add the PR bot to your GitHub repo
+
+```bash
+cd /path/to/your-repo
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/AmanTechWiz/NextTrace/main/integrations/github/nexttrace-pr-review.yml \
+  -o .github/workflows/nexttrace-pr-review.yml
+gh secret set GEMINI_API_KEY      # optional: paste your Gemini key when asked
+git add .github && git commit -m "Add NextTrace PR review" && git push
+```
+
+Open any pull request. The workflow starts its own FalkorDB, maps your base branch and the PR branch, compares them, and posts one comment (it updates that comment on every new push). It takes about 35 to 50 seconds. Nothing is stored between runs, and no service of ours is involved.
+
+Repository variables you can set (all optional): `NEXTTRACE_GEMINI_MODEL` (default `gemini-flash-latest`), `NEXTTRACE_GEMINI_RPM` and `NEXTTRACE_GEMINI_RPD` to cap requests on a free-tier key, `NEXTTRACE_REPO` to point at your own fork of NextTrace.
+
+GitHub gives pull requests from forks a read-only token and no secrets, so the bot works on branches inside the same repository.
+
+#### 5. See it work in two minutes on a public repo
+
+```bash
+git clone --depth 1 https://github.com/GoogleCloudPlatform/microservices-demo ../boutique
+uv run python -m nexttrace.mapper ../boutique --graph boutique
+```
+
+Then, in an agent that has NextTrace registered, ask: *"In graph boutique, what breaks if cartservice fails?"* Or open http://localhost:3000, pick the graph `boutique` and run `MATCH (a:Service)-[c:CALLS]->(b:Service) RETURN a, c, b`.
 
 <details>
-<summary>Keep data across restarts, run the tests, add the PR bot</summary>
+<summary>Troubleshooting</summary>
+
+- **"FalkorDB is not reachable":** start it with `docker start falkordb`.
+- **The agent greps instead of using NextTrace:** add "use NextTrace" to the question, or put one line in your project's `CLAUDE.md` naming the graph (for example "use the nexttrace tools on graph myapp for dependency questions").
+- **`/mcp` does not show nexttrace:** use an absolute path after `--directory`, and run `uv sync` in the NextTrace folder once.
+- **The graph is empty:** map the repo first (step 3), then ask. `list_maps` shows what exists.
+- **The PR bot posts the rule-based review:** no `GEMINI_API_KEY` secret is set, or the key hit its limit. The facts and the verdict are identical; only the wording is plainer.
+
+</details>
+
+<details>
+<summary>Keep data across restarts, FalkorDB Cloud, tests, run a review locally</summary>
 
 **Persistent FalkorDB:**
 
@@ -154,21 +251,18 @@ docker run -d --name falkordb -v falkordb_data:/var/lib/falkordb/data -p 6379:63
   -e REDIS_ARGS="--appendonly yes --appendfsync everysec" falkordb/falkordb:latest
 ```
 
-**Connection settings** (same names as the official FalkorDB MCP server, so FalkorDB Cloud works): `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_USERNAME`, `FALKORDB_PASSWORD`, `FALKORDB_TLS`.
+**FalkorDB Cloud or another host:** set `FALKORDB_HOST`, `FALKORDB_PORT`, `FALKORDB_USERNAME`, `FALKORDB_PASSWORD` and `FALKORDB_TLS` (the same names as the official FalkorDB MCP server) in the `env` block above, or as repository secrets for the PR bot.
 
 **Tests:** `uv run pytest` with FalkorDB running. On a fresh clone: 116 passed, 6 skipped (those need the benchmark repos under `data/repos/`).
 
-**PR bot on your repo:**
-
-1. Copy [`integrations/github/nexttrace-pr-review.yml`](integrations/github/nexttrace-pr-review.yml) to `.github/workflows/` in your repo.
-2. Optional: add a `GEMINI_API_KEY` repository secret for the AI review. Bring your own key; it is used only for PR reviews.
-3. Optional repository variables: `NEXTTRACE_GEMINI_MODEL` (default `gemini-flash-latest`), and `NEXTTRACE_GEMINI_RPM` / `NEXTTRACE_GEMINI_RPD` to cap usage on a free-tier key.
-
-**Run the review locally:**
+**Run the PR review on your machine:**
 
 ```bash
-uv run python -m nexttrace.pr_review --repo ../your-repo --base origin/main --graph pr --map
+cd /path/to/NextTrace
+uv run python -m nexttrace.pr_review --repo /path/to/your-repo --base origin/main --graph pr --map
 ```
+
+Set `GEMINI_API_KEY` in your shell to include the AI review; leave it unset for the rule-based one.
 
 </details>
 
