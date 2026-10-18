@@ -333,8 +333,8 @@ All numbers come from saved runs in [`bench/results/`](bench/results/), with the
 
 | What we measured | How | Result |
 |---|---|---|
-| Is the map right? | Compared with 1.1M recorded real calls (RCAEval RE2, 15 runs) | Train Ticket 55/55 service calls and 63/63 route calls found; Online Boutique 9/9 and 11/11. [Report](docs/map_report.md) |
-| Does it generalize? | 8 repos not used during development; answer key written from the authors' own docs before running; code frozen | Scanner alone 36/74 documented connections (49%); scanner plus a Claude Code agent using the gap tools 57/74 (77%). [Report](docs/generalization.md), [agent run](docs/generalization_agent.md) |
+| How well does it map a repo it has never seen? | 8 repos not used during development; answer key written from the authors' own docs before running; code frozen | Scanner alone 36/74 documented connections (49%); scanner plus a Claude Code agent using the gap tools 57/74 (77%). [Report](docs/generalization.md), [agent run](docs/generalization_agent.md) |
+| Does the map match real traffic? (Train Ticket and Online Boutique, the two repos used during development) | Compared with 1.1M recorded calls (RCAEval RE2, 15 runs) in both directions | **Traffic to map:** all 55 service-to-service calls seen in Train Ticket's traffic are on the map (Online Boutique 9 of 9). **Map to traffic:** of 162 mapped Train Ticket calls, traffic could check 61, and 55 of them (90%) appeared; the other 6 were read in the code and are real calls in features the test traffic never used. 101 calls could not be checked (databases and untraced services). [Report](docs/map_report.md) |
 | Does the agent need it? | Claude Sonnet 5.5 (medium effort), 8 dependency questions on Train Ticket, citations checked against the code | Alone: 28/40 known callers, 41 of 42 citations invented. With code search: 38/40. With NextTrace: 40/40, 0 invented. Graph alone, no model: 40/40 in milliseconds. [Report](docs/agent_bench.md) |
 | Does the checker catch bad answers? | `check_answer` run on every answer above | Flagged exactly the 41 invented citations and nothing in the honest answers |
 
