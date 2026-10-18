@@ -318,6 +318,46 @@ cd /path/to/NextTrace
 uv run python -m nexttrace.mapper /path/to/your-repo --graph myapp
 ```
 
+#### Map your repo and use the main tools
+
+**Map a repo.** Pick one of three ways. All three write the same graph, and none of them calls a model.
+
+```text
+1. Ask your agent:   "Map /path/to/your-repo with NextTrace into a graph called myapp."
+2. Command line:     uv run python -m nexttrace.mapper /path/to/your-repo --graph myapp
+3. Several repos:    run the command once per repo with the same --graph name. Calls between the repos link up.
+```
+
+It prints how many services, calls and routes it found. Run it again after your code changes: calls that disappeared are marked stale, not deleted, so history stays valid. If you have recorded traffic, add `--traces trace.csv` (columns `spanID`, `parentSpanID`, `serviceName`) and matching calls become high confidence.
+
+The parser misses wiring that never appears in code, such as service registries and message buses. Ask your agent to *"run find_gaps and fill in what the parser missed."* It can add a connection only if it quotes the exact line, and the server checks that quote in your code.
+
+**Ask questions in Claude Code.** Name the graph in your question. You don't need to name the tool.
+
+| You ask | Tool the agent uses | What comes back |
+|---|---|---|
+| "Which maps do we have?" | `list_maps` | Each graph, the repos and commits mapped into it |
+| "Who calls the order service, and what does it call?" | `service_calls` | Callers and callees, each with `file:line` evidence and confidence |
+| "Which routes does the seat service expose, and who calls each?" | `endpoint_calls` | Routes with their callers, and calls that match no route |
+| "If payments fails, what breaks and how far does it spread?" | `blast_radius` | Every affected service, hops away, owner, and the chain with evidence |
+| "How does a request reach the order service?" | `failure_paths` | The shortest call chains from the entry points |
+| "Which services matter most? Any single points of failure?" | `criticality` | A ranking using FalkorDB PageRank and betweenness, plus how many services depend on each |
+| "Check that answer against the map before I trust it" | `check_answer` | Which cited calls are real, stale or not on the map |
+| "What did the parser miss?" | `find_gaps`, then `add_connection` | A server-computed checklist, then proof-checked additions |
+| Anything else, in your own words | `get_graph_schema`, then `query_graph_readonly` | Your Cypher, read-only, including FalkorDB algorithms |
+
+Examples to paste:
+
+> In graph myapp, what breaks if the payments service fails? Give the file and line for the direct callers.
+
+> In graph myapp, who calls POST /orders, and is it safe to rename that route?
+
+> In graph myapp, which three services are the most critical, and why?
+
+Incident tools (`triage_alarms`, `claim_incident`, `record_finding`, `resolve_incident`, `similar_incidents` and others) let several agents hand an incident along and recall past fixes. They are listed in full under "All 31 MCP tools" below.
+
+If your agent searches the code instead of using the graph, add one line to your project's `CLAUDE.md`: *"For questions about which services call or depend on each other, use the nexttrace tools on graph myapp first."*
+
 #### 4. B: Add the PR bot to your GitHub repo
 
 ```bash
