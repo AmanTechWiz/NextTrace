@@ -2,6 +2,9 @@
 
 **A shared, verified map of your services that AI agents and code reviewers can trust: who calls whom, what breaks if something fails, and what fixed it last time. Stored in FalkorDB.**
 
+<img width="1983" height="793" alt="image" src="https://github.com/user-attachments/assets/bb781bc1-f139-4ed6-803a-91e2da331837" />
+
+
 [![FalkorDB](https://img.shields.io/badge/FalkorDB-graph%20database-1f2937?style=for-the-badge&logoColor=white)](https://www.falkordb.com/)
 [![Python](https://img.shields.io/badge/Python-3.12-1f2937?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![MCP](https://img.shields.io/badge/MCP-31%20tools-1f2937?style=for-the-badge)](https://modelcontextprotocol.io/)
@@ -10,8 +13,7 @@
 [![Hackathon](https://img.shields.io/badge/Graph%20Hacks-WeMakeDevs%20x%20FalkorDB-7c3aed?style=for-the-badge)](https://www.wemakedevs.org/hackathons/falkordb)
 [![Tracks](https://img.shields.io/badge/Tracks-1%20%2B%202-7c3aed?style=for-the-badge)](#tracks-entered)
 
-> **TODO (author):** add a demo GIF or screenshot of the graph view here, for example `docs/media/demo.gif`.
->
+
 > **Demo video:** TODO link. **Live example:** the PR bot's real review on [AmanTechWiz/train-ticket PR #1](https://github.com/AmanTechWiz/train-ticket/pull/1).
 
 ---
