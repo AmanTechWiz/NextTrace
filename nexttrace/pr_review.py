@@ -75,8 +75,8 @@ FUNC = [re.compile(p) for p in (
 NOT_FUNC = {"if", "for", "while", "switch", "catch", "return", "new", "else", "try", "synchronized", "function"}
 
 
-def changed_lines(diff):
-    """{file: sorted new-side line numbers the diff adds or deletes at}"""
+def changed_lines(diff, added_only=False):
+    """{file: sorted new-side line numbers the diff adds, plus (unless added_only) the line just above each deletion}"""
     out, file, n = {}, None, 0
     for line in diff.splitlines():
         if line.startswith("+++ "):
@@ -86,11 +86,24 @@ def changed_lines(diff):
         elif file and line.startswith("+"):
             out.setdefault(file, set()).add(n)
             n += 1
-        elif file and line.startswith("-"):
-            out.setdefault(file, set()).add(n)
+        elif file and line.startswith("-") and not added_only:
+            out.setdefault(file, set()).add(max(n - 1, 1))  # a deletion sits after the line above it
         elif file and line.startswith(" "):
             n += 1
     return {f: sorted(v) for f, v in out.items()}
+
+
+def removed_functions(diff):
+    """{file: functions whose signature line the diff deletes and does not add back}"""
+    gone, back, file = {}, {}, None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            file = line[6:] if line.startswith("+++ b/") else None
+        elif file and line[:1] in "+-" and not line.startswith(("+++", "---")):
+            m = next((m for p in FUNC if (m := p.search(line[1:]))), None)
+            if m and m.group(1) not in NOT_FUNC:
+                (gone if line[0] == "-" else back).setdefault(file, set()).add(m.group(1))
+    return {f: sorted(v - back.get(f, set())) for f, v in gone.items() if v - back.get(f, set())}
 
 
 def _read(root, rel):
@@ -137,6 +150,7 @@ def facts(g, files, diff="", root=None, base=None):
         r = g.ro_query("MATCH (r:MapRun) RETURN r.root ORDER BY r.run DESC LIMIT 1").result_set
         root = r[0][0] if r else None
     lines_by_file = changed_lines(diff)
+    added_by_file, removed = changed_lines(diff, added_only=True), removed_functions(diff)
     names = sorted(touched)[:MAX_SERVICES]
     out = {"files": list(files), "unowned_files": unowned, "services": [], "connections": [], "routes": [], "broken": [],
            "incidents": [], "truncated_services": max(0, len(touched) - MAX_SERVICES)}
@@ -157,7 +171,8 @@ def facts(g, files, diff="", root=None, base=None):
         out["services"].append({
             "id": f"S{i}", "service": n, "owner": b["owner"], "changed_files": touched[n],
             "changed_functions": {f: fn for f in touched[n]
-                                  if (fn := enclosing_functions(_read(root, f), lines_by_file.get(f, [])))},
+                                  if (fn := enclosing_functions(_read(root, f), added_by_file.get(f, [])))},
+            "removed_functions": {f: removed[f] for f in touched[n] if f in removed},
             "dependents": rank["dependents"], "rank": rank["rank"], "of": of, "kind": b["kind"], "betweenness": rank["betweenness"],
             "pagerank": rank["pagerank"], "entry_points_hit": b["entry_points_hit"],
             "owners_to_notify": b["owners_to_notify"],
@@ -184,7 +199,7 @@ def facts(g, files, diff="", root=None, base=None):
         rs.sort()
         for k, (at, method, path, svc, callers) in enumerate(rs):
             end = rs[k + 1][0] - 1 if k + 1 < len(rs) else 10 ** 9
-            if any(at - 1 <= n <= end for n in lines_by_file[f]):
+            if any(at - 1 <= n <= end for n in added_by_file.get(f, [])):
                 out["routes"].append({"id": f"R{len(out['routes']) + 1}", "service": svc, "route": f"{method} {path}",
                                       "declared_at": f"{f}:{at}", "callers": callers,
                                       "functions": enclosing_functions(_read(root, f), [at + 1], 1)})
@@ -280,6 +295,7 @@ def _compact(f):
                           for a in s["affected"][:40]]} for s in f["services"]],
             "calls": [{k: c[k] for k in ("id", "caller", "callee", "evidence")} for c in f["connections"][:120]],
             "changed_functions": {s["service"]: s["changed_functions"] for s in f["services"] if s["changed_functions"]},
+            "removed_functions": {s["service"]: s["removed_functions"] for s in f["services"] if s["removed_functions"]},
             "direct_callers_code": {s["service"]: s["caller_code"] for s in f["services"] if s["caller_code"]},
             "calls_to_missing_routes": [{k: b[k] for k in ("id", "caller", "service", "route", "evidence", "new", "code")}
                                         for b in f["broken"]],
@@ -455,9 +471,10 @@ def summary_text(f, rule_v):
         return "No service on the map is touched by this change, so nothing downstream is affected."
     parts = []
     for s in f["services"]:
-        fns = [fn for v in s["changed_functions"].values() for fn in v][:3]
+        fns = [f"`{fn}`" for v in s["changed_functions"].values() for fn in v][:3]
+        fns += [f"removes `{fn}`" for v in s["removed_functions"].values() for fn in v][:3]
         files = ", ".join(f"`{_short(x)}`" for x in s["changed_files"][:3])
-        parts.append(f"`{s['service']}` ({files}" + (f": {', '.join(f'`{x}`' for x in fns)}" if fns else "") + ")")
+        parts.append(f"`{s['service']}` ({files}" + (f": {', '.join(fns)}" if fns else "") + ")")
     out = ["This PR changes " + "; ".join(parts) + "."]
     new = [b for b in f["broken"] if b["new"]]
     if new:

@@ -233,7 +233,11 @@ def test_cli_end_to_end(repo, tmp_path, monkeypatch):
 def test_changed_lines_and_enclosing_functions_across_languages():
     diff = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -3,2 +3,3 @@ def a():\n     x = 1\n+    y = 2\n     z\n"
             "@@ -10,2 +11,1 @@\n-    gone()\n     keep\n")
-    assert pr_review.changed_lines(diff) == {"x.py": [4, 11]}
+    assert pr_review.changed_lines(diff) == {"x.py": [4, 10]}
+    assert pr_review.changed_lines(diff, added_only=True) == {"x.py": [4]}
+    gone = ("+++ b/C.java\n@@ -30,9 +30,2 @@\n-    @PostMapping(\"/a\")\n-    public R queryOne(T t) {\n-        return x;\n-    }\n"
+            "+++ b/D.py\n@@ -1,2 +1,2 @@\n-def kept(a):\n+def kept(a, b):\n")
+    assert pr_review.removed_functions(gone) == {"C.java": ["queryOne"]}          # a changed signature isn't a removal
     py = ["import os", "", "def first():", "    a = 1", "", "async def second(x):", "    return x"]
     assert pr_review.enclosing_functions(py, [4, 7]) == ["first", "second"]
     java = ["class A {", "    @PostMapping(\"/x\")", "    public Response<Seat> create(@RequestBody Seat s) {",
