@@ -373,7 +373,7 @@ def ai_review(g, f, diff, rule_verdict, key=None, model=None, call=call_gemini):
         return None, "no GEMINI_API_KEY: rule-based review only"
     if not f["services"]:
         return None, "no mapped service touched: nothing for the AI to assess"
-    model = model or os.environ.get("NEXTTRACE_GEMINI_MODEL", "gemini-flash-latest")
+    model = model or os.environ.get("NEXTTRACE_GEMINI_MODEL") or "gemini-flash-latest"  # CI passes unset vars as ""
     prompt = (f"FACTS:\n{json.dumps(_compact(f), indent=1)}\n\nRULE VERDICT: {rule_verdict}\n\n"
               f"DIFF (may be truncated):\n{diff[:MAX_DIFF_CHARS]}")
     try:

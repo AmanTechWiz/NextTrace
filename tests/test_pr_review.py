@@ -271,3 +271,14 @@ def test_comment_layout_scales_with_the_verdict(repo):
     assert "`pay`" in head                                                       # the changed function, by name
     assert "classDef changed" in head and "color:#111111" in head                # readable on light and dark themes
     assert "|---|" not in head                                                   # tables only inside the details
+
+
+def test_empty_model_variable_falls_back_to_default(repo, monkeypatch):
+    _, g = repo
+    monkeypatch.setenv("NEXTTRACE_GEMINI_MODEL", "")                             # how GitHub passes an unset variable
+    seen = {}
+    def call(prompt, key, model, **kw):
+        seen["model"] = model
+        return {"verdict": "review", "summary": "s", "findings": []}, {}
+    pr_review.ai_review(g, pr_review.facts(g, ["payments/app.py"]), "", "review", key="k", call=call)
+    assert seen["model"] == "gemini-flash-latest"
