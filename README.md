@@ -314,14 +314,28 @@ As the hackathon rules require:
 
 ### PR review on a real repo (live)
 
-[AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket) is a fork of the public [Train Ticket](https://github.com/FudanSELab/train-ticket) system (40+ Java services) with the NextTrace workflow installed.
+[AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket) is a fork of the public [Train Ticket](https://github.com/FudanSELab/train-ticket) system (40+ Java services) with the NextTrace workflow installed. The bot runs on every pull request, maps the base branch and the PR branch in FalkorDB, and posts one comment. Gemini writes the explanation from graph facts only.
 
-1. [PR #1](https://github.com/AmanTechWiz/train-ticket/pull/1) renames one route in `ts-seat-service`: `/seats/left_tickets` becomes `/seats/remaining_tickets`.
-2. The workflow maps the repo in FalkorDB, finds the changed handler (`getLeftTicketOfInterval`), and sees three services whose code still calls the old path.
-3. **The live moment:** the bot comments **Risky · Breaks 3 caller(s)**, names `ts-travel-service`, `ts-travel2-service` and `ts-travel-plan-service`, links each to the exact line that will fail, and Gemini explains it in plain words with a fix.
-4. [PR #2](https://github.com/AmanTechWiz/train-ticket/pull/2) only edits the README. The bot says **Safe** in two lines.
+**Five real PRs, open to read:**
 
-Measured on these runs: about 35 seconds per workflow run, one Gemini request of about 4.5k tokens for PR #1, none for PR #2.
+| PR | What changes | Bot verdict | Why it is hard to spot in the diff |
+|---|---|---|---|
+| [#1](https://github.com/AmanTechWiz/train-ticket/pull/1) | `ts-seat-service` renames `/seats/left_tickets` to `/seats/remaining_tickets` | **Risky**, 3 callers break | The callers are in other services; nothing in the diff mentions them |
+| [#3](https://github.com/AmanTechWiz/train-ticket/pull/3) | `ts-route-service` moves its API prefix from `/api/v1` to `/api/v2` | **Risky**, 7 callers break | One changed line, and no route line in the diff names what breaks |
+| [#4](https://github.com/AmanTechWiz/train-ticket/pull/4) | `ts-train-service` changes a lookup from GET to POST | **Risky**, 6 callers break | The path stays the same; only the HTTP method changes |
+| [#5](https://github.com/AmanTechWiz/train-ticket/pull/5) | `ts-basic-service` removes `POST /basic/travel` as "legacy cleanup" | **Risky**, 4 callers break | It looks like dead code removal |
+| [#2](https://github.com/AmanTechWiz/train-ticket/pull/2) | Adds a line to the README | **Safe**, two lines | Nothing on the map is touched |
+
+**What each review contains:**
+
+1. A plain-language summary: what changed, which services are affected, what to do.
+2. A **Will break** list: each caller linked to the exact line that still uses the old route.
+3. A short checklist, a small colour-coded diagram, and past incidents when the graph has them.
+4. Tables and evidence, folded away.
+
+**How the bot knows what this PR broke:** it maps the base branch and the PR branch, then compares. A call that matched a declared route before the change and matches none after it is broken by this PR, however the route moved (a new prefix, a changed method, a deleted handler). Gemini then reads the callers' code around each call and explains the failure, for example a 405 for the GET to POST change and a 404 for the removed route. A Gemini note that cites no graph fact, or names a service the graph does not contain, is dropped before posting.
+
+Measured on these runs: 33 to 49 seconds per workflow run, and one Gemini request of about 4.5k to 7.3k tokens per risky PR (none for PR #2). All five reviews were written by the bot on its own when each PR opened.
 
 ### Three agents, one graph, real failures
 
