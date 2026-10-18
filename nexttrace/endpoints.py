@@ -235,6 +235,8 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
     # `%s` / `${domain}` after the host: `util.format("http://carts%s/carts", domain)`
     url = re.compile(rf"[a-z]+://({alts})(?::\d+)?(?:%[sv]|\$\{{[^}}]*\}}|\{{\w*\}})?(/[^\"'\s`?#]*)?(?:[?#][^\"'`]*)?[\"'`](\s*\+)?")
     named = re.compile(rf"[\"']({alts})[\"']\s*\)\s*\+\s*[\"'](/[^\"']*)[\"'](\s*\+)?")  # getServiceUrl("x") + "/path"
+    # base = lookup("x") on its own line; the route call is a later `base + "/path"`
+    named_base = re.compile(rf"(\w+)\s*(?::|:?=)\s*[\w.]+\(\s*[\"']({alts})[\"']\s*\)\s*;?\s*$")
     out = set()
     for caller, s in m.services.items():
         if not s["source_dir"]:
@@ -255,11 +257,21 @@ def calls(repo: Path, m: ServiceMap, grpc_owner: dict):
             stubs = {g.group(1): g.group(2) for line in lines for g in [PY_STUB.search(line) or GO_CLIENT.search(line)]
                      if g and _client_var(g, line)}
             consts = {}  # var -> [(callee, path, open_end, where, text)]; if/else may assign several URLs
+            bases = {}   # var -> (callee, where): a service's base address with no path yet
             used, fresh = set(), {}  # fresh[var]: used since its last assignment
             for i, line in enumerate(lines):
                 if line.lstrip().startswith(COMMENT):
                     continue
                 where, text = f"{rel}:{i + 1}", line.strip()[:160]
+                nb = named_base.search(line)
+                if nb:
+                    bases[nb.group(1)] = (nb.group(2), where) if nb.group(2) != caller else None
+                for var, base in bases.items():
+                    if base and base[1] != where:
+                        for tail in _usage(line, var):
+                            if tail.startswith("/"):  # only a literal path makes it a route call
+                                full = _path(tail)
+                                out.add(Call(caller, base[0], _method_near(lines, i), full, full.count("{}"), where, text))
                 for hit in list(url.finditer(line)) + list(named.finditer(line)):
                     callee = hit.group(1)
                     path = _path(hit.group(2) or "/", _chain(line[_after(hit):]))

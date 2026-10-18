@@ -99,6 +99,27 @@ class Orders {
     assert not any(c.path.startswith("/charge") and c.method == "GET" for c, _ in pairs)  # no cross-method mixing
 
 
+def test_base_url_from_a_lookup_then_path_appended(tmp_path):
+    repo = make(tmp_path / "r", {
+        "docker-compose.yml": COMPOSE,
+        "seats/src/main/java/SeatController.java": SEATS_CONTROLLER,
+        "orders/src/main/java/Orders.java": """
+class Orders {
+    void a() {
+        String seatUrl = getServiceUrl("seats");
+        restTemplate.exchange(seatUrl + "/api/v1/seats/list", HttpMethod.GET, e, R.class);
+        log.info("seatUrl is " + seatUrl);        // no path appended: not a route call
+        String me = getServiceUrl("orders");      // its own address: never a call
+        restTemplate.exchange(me + "/api/v1/orders", HttpMethod.GET, e, R.class);
+    }
+}
+""",
+        "web/client.js": "const api = resolve('seats');\nfetch(api + '/api/v1/seats/' + id, {method: 'DELETE'});\n",
+    })
+    _, _, pairs = run(repo)
+    assert linked(pairs) == {("orders", "seats GET /api/v1/seats/list"), ("web", "seats DELETE /api/v1/seats/{seatId}")}
+
+
 def test_route_styles_express_flask_fastapi_go(tmp_path):
     repo = make(tmp_path / "r", {
         "docker-compose.yml": COMPOSE,
