@@ -14,7 +14,12 @@
 [![Tracks](https://img.shields.io/badge/Tracks-1%20%2B%202-7c3aed?style=for-the-badge)](#tracks-entered)
 
 
-> **Demo video:** TODO link. **Live example:** the PR bot's real review on [AmanTechWiz/train-ticket PR #1](https://github.com/AmanTechWiz/train-ticket/pull/1).
+> **Live deployment and video**
+
+- **Live:** the PR bot runs on every pull request in [AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket/pulls). There is no hosted web app; the rules allow local setup instead, and the steps above take about five minutes.
+- **Demo video:** TODO (author): add the link.
+
+
 
 ---
 
@@ -328,12 +333,6 @@ All numbers come from saved runs in [`bench/results/`](bench/results/), with the
 - The incident trial is three cases. Fixes were not applied to a running system; `worked` records the agent's decision.
 
 </details>
-
-## Live deployment and video
-
-- **Live:** the PR bot runs on every pull request in [AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket/pulls). There is no hosted web app; the rules allow local setup instead, and the steps above take about five minutes.
-- **Demo video:** TODO (author): add the link.
-
 
 ## Limitations and what's next
 
