@@ -3,6 +3,7 @@
   blast_radius(g, service)       what breaks if `service` fails: everything that calls it, directly or through others
   failure_paths(g, service)      how a request reaches `service`, from the system's entry points or a given caller
   criticality(g)                 which services matter most: dependents, betweenness, PageRank
+  check_answer(g, connections)   flag any call or service in an agent's answer that the map can't back up
 
 A cited connection is the CALLS edge exactly as stored: caller, callee, confidence, sources and its first evidence line
 (file:line or traffic count). Stale edges (gone from the code) are left out unless include_stale is set.
@@ -184,3 +185,52 @@ def criticality(g, top: int = 10, service: str = "", kind: str = "", include_sta
                  if stale else ""),
     }
 
+
+
+def check_answer(g, connections: list, services: list = (), target: str = "") -> dict:
+    """Check an agent's answer against the map before anyone trusts it.
+
+    connections: the calls the answer relies on, [{caller, callee}, ...] or [(caller, callee), ...]. Each is looked up
+    as stored: live on the map -> verified (with the map's own evidence); stale -> flagged; absent -> not_on_map.
+    services: the services the answer names. Each must exist on the map; with `target`, each must also reach the target
+    through the answer's own verified connections (so a claimed chain has to hold hop by hop), else unsupported.
+    ok is true only when nothing is flagged."""
+    pairs = []
+    for c in connections:
+        a, b = (c.get("caller"), c.get("callee")) if isinstance(c, dict) else tuple(c)[:2]
+        if not a or not b:
+            raise ValueError(f"each connection needs a caller and a callee, got {c!r}")
+        pairs.append((str(a), str(b)))
+    if target:
+        _require(g, target)
+    stored = {(r[0], r[1]): r[2:] for r in g.ro_query(
+        "UNWIND $p AS p MATCH (a:Service {name: p[0]})-[c:CALLS]->(b:Service {name: p[1]}) "
+        "RETURN a.name, b.name, c.confidence, c.evidence[0], coalesce(c.stale, false)", {"p": pairs}).result_set}
+    names = {r[0] for r in g.ro_query("UNWIND $n AS n MATCH (s:Service {name: n}) RETURN s.name",
+                                      {"n": sorted({*map(str, services), *(x for p in pairs for x in p)})}).result_set}
+    verified, stale, missing = [], [], []
+    for a, b in dict.fromkeys(pairs):
+        if (a, b) not in stored:
+            missing.append({"caller": a, "callee": b})
+        elif stored[(a, b)][2]:
+            stale.append({"caller": a, "callee": b, "evidence": stored[(a, b)][1]})
+        else:
+            verified.append({"caller": a, "callee": b, "confidence": stored[(a, b)][0], "evidence": stored[(a, b)][1]})
+    unknown = sorted({x for x in (*map(str, services), *(x for p in pairs for x in p)) if x not in names})
+    unsupported = []
+    if target:  # walk the answer's verified hops backwards from the target
+        callers, reach, todo = {}, set(), [target]
+        for v in verified:
+            callers.setdefault(v["callee"], []).append(v["caller"])
+        while todo:
+            for c in callers.get(todo.pop(), ()):
+                if c not in reach:
+                    reach.add(c)
+                    todo.append(c)
+        unsupported = sorted(s for s in map(str, services) if s in names and s != target and s not in reach)
+    flagged = len(stale) + len(missing) + len(unknown) + len(unsupported)
+    return {"ok": flagged == 0, "verified": verified, "stale": stale, "not_on_map": missing,
+            "unknown_services": unknown, "unsupported_services": unsupported,
+            "summary": f"{len(verified)} verified, {flagged} flagged"
+                       + (f" ({len(missing)} not on map, {len(stale)} stale, {len(unknown)} unknown services, "
+                          f"{len(unsupported)} unsupported)" if flagged else "")}

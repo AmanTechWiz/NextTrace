@@ -256,3 +256,39 @@ def test_train_ticket_blast_radius_matches_the_scanned_edges():
         assert all(r["kind"] == "service" for r in crit["ranked"]) and crit["ranked"][0]["dependents"] > 10
     finally:
         graph.delete()
+
+
+def test_check_answer_verifies_live_calls_and_flags_the_rest(g):
+    got = failure.check_answer(g, [{"caller": "orders", "callee": "payments"}, ("legacy", "payments"),
+                                   ("web", "payments"),            # stale: gone from the code
+                                   ("search", "payments"),         # both real services, no such call
+                                   ("ghost", "payments"),          # invented service
+                                   ("orders", "payments")])        # duplicate counted once
+    assert [(v["caller"], v["callee"]) for v in got["verified"]] == [("orders", "payments"), ("legacy", "payments")]
+    assert got["verified"][0]["evidence"] == "code | orders/client.py:8 | http://payments/api"   # the map's, not the agent's
+    assert [(s["caller"], s["callee"]) for s in got["stale"]] == [("web", "payments")]
+    assert got["not_on_map"] == [{"caller": "search", "callee": "payments"}, {"caller": "ghost", "callee": "payments"}]
+    assert got["unknown_services"] == ["ghost"] and not got["ok"]
+    assert got["summary"].startswith("2 verified, 4 flagged")
+
+
+def test_check_answer_needs_every_claimed_service_chained_to_the_target(g):
+    chain = [("orders", "payments"), ("gateway", "orders"), ("web", "gateway")]
+    ok = failure.check_answer(g, chain, services=["orders", "gateway", "web"], target="payments")
+    assert ok["ok"] and ok["summary"] == "3 verified, 0 flagged"
+    # admin really calls orders, but the answer never cited that hop; catalog is real but doesn't reach payments
+    got = failure.check_answer(g, chain[:2], services=["orders", "gateway", "web", "admin", "catalog"], target="payments")
+    assert got["unsupported_services"] == ["admin", "catalog", "web"] and not got["ok"]
+    # a broken middle hop leaves everything above it unsupported
+    got = failure.check_answer(g, [("orders", "payments"), ("web", "gateway")], services=["orders", "web"], target="payments")
+    assert got["unsupported_services"] == ["web"]
+
+
+def test_check_answer_edge_cases(g):
+    assert failure.check_answer(g, [])["ok"]
+    assert failure.check_answer(g, [], services=["payments"])["ok"]
+    assert failure.check_answer(g, [], services=["nope"])["unknown_services"] == ["nope"]
+    with pytest.raises(ValueError, match="no service"):
+        failure.check_answer(g, [], services=["orders"], target="paymnts")
+    with pytest.raises(ValueError, match="caller and a callee"):
+        failure.check_answer(g, [{"caller": "orders"}])

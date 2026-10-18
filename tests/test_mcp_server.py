@@ -57,7 +57,7 @@ def test_tools_are_listed_with_read_only_hints():
                      "alarms_from_metrics": True, "triage_alarms": False, "list_incidents": True, "get_incident": True,
                      "claim_incident": False, "record_finding": False, "resolve_incident": False,
                      "similar_incidents": True, "incident_timeline": True, "start_session": False, "log_step": False,
-                     "agent_history": True}
+                     "agent_history": True, "check_answer": True}
 
 
 def test_map_then_read_with_evidence(tmp_path, clean):
@@ -602,6 +602,10 @@ def test_three_agents_in_separate_processes_hand_off_through_the_graph(tmp_path,
         made_up = await s.call_tool("record_finding", {"graph": GRAPH, "incident": inc, "agent": "investigator", "cause": "cart",
                                                        "reason": "x", "cited": [{"caller": "admin-ui", "callee": "cart"}]})
         cited = [{"caller": c["caller"], "callee": c["callee"]} for c in b["cited_connections"]]
+        check = (await s.call_tool("check_answer", {"graph": GRAPH, "connections": cited + [{"caller": "admin-ui", "callee": "cart"}],
+                                                    "services": ["front-end"], "target": "cart"})).structured_content
+        assert not check["ok"] and check["not_on_map"] == [{"caller": "admin-ui", "callee": "cart"}]
+        assert len(check["verified"]) == len(cited) and check["unsupported_services"] == []
         ok = await s.call_tool("record_finding", {"graph": GRAPH, "incident": inc, "agent": "investigator", "cause": "cart",
                                                   "reason": "front-end errors follow cart latency", "cited": cited,
                                                   "session": sid})

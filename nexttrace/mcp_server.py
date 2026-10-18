@@ -666,6 +666,16 @@ def blast_radius(graph: str, service: str, max_depth: int = 6, include_stale: bo
     return _ask(failure.blast_radius, graph, service, max_depth=max_depth, include_stale=include_stale)
 
 
+@server.tool(annotations=ToolAnnotations(title="Check an answer against the map", read_only_hint=True), structured_output=True)
+@_friendly
+def check_answer(graph: str, connections: list[dict[str, str]], services: list[str] | None = None, target: str = "") -> dict[str, Any]:
+    """Run before giving an answer that names services or calls. connections: every call your answer relies on, as
+    {caller, callee}. services: every service it names; with target, each must reach the target through your verified
+    connections. Returns verified calls with the map's evidence, and flags calls not on the map, stale calls, unknown
+    services and unsupported claims. Drop or fix anything flagged before answering; ok=true means nothing was."""
+    return _ask(failure.check_answer, graph, connections, services=services or [], target=target)
+
+
 @server.tool(annotations=ToolAnnotations(title="How requests reach a service", read_only_hint=True), structured_output=True)
 @_friendly
 def failure_paths(graph: str, service: str, from_service: str = "", max_paths: int = 10, max_depth: int = 6,
