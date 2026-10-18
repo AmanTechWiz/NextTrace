@@ -91,6 +91,16 @@ flowchart LR
 - **The MCP server** ([`nexttrace/mcp_server.py`](nexttrace/mcp_server.py)) exposes everything to the agent the user already runs. No model runs inside NextTrace for these tools.
 - **The PR bot** ([`integrations/github/nexttrace-pr-review.yml`](integrations/github/nexttrace-pr-review.yml)) starts FalkorDB as a service container, maps the PR head, and posts or updates one comment. The only place NextTrace calls a model is here, with the user's own Gemini key, and it works without one.
 
+## Project layout
+
+```text
+nexttrace/      mapper.py endpoints.py failure.py memory.py alarms.py pr_review.py mcp_server.py graphdb.py
+integrations/   github/nexttrace-pr-review.yml
+bench/          map_proof.py generalization.py agent_bench.py agent_trial.py, results/
+docs/           the reports linked above
+tests/          unit and integration tests (MCP over stdio, parallel agents, tenant isolation, PR review)
+```
+
 ## Submission checklist
 
 Everything the hackathon asks the README to include, in one place.
@@ -101,9 +111,9 @@ Everything the hackathon asks the README to include, in one place.
 
 **Track 1: the graph decides what the agent does**
 
-- **It follows connections several steps away.** Ask "what breaks if the payments service goes down?" and NextTrace walks the map outward, caller by caller, up to six steps, and returns every affected service with the chain that links it. In our benchmark an agent without the map stopped at the first ring and found 4 of 6 affected services; with the map it found all 6. ([`failure.py`](nexttrace/failure.py))
+- **It follows connections several steps away.** Ask "what breaks if the payments service goes down?" and NextTrace walks the map outward, caller by caller, up to six steps, and returns every affected service with the chain that links it. In our benchmark, an agent without the map stopped at the first ring and found 4 of 6 affected services; with the map it found all 6. ([`failure.py`](nexttrace/failure.py))
 - **The agent picks graph tools on its own.** Through MCP, Claude Code or any other agent chooses between 31 tools: impact, paths, rankings, gap finding, incidents. The ranking tool runs FalkorDB's own PageRank and betweenness algorithms to tell which services everything else leans on. ([`mcp_server.py`](nexttrace/mcp_server.py))
-- **It acts on what the graph shows.** On every pull request the bot looks up who calls the code being changed and posts a verdict: safe, review or risky. On three deliberately tricky PRs (an API prefix bump, a GET changed to POST, a removed endpoint) it named every service that would break: 7, 6 and 4 callers. ([`pr_review.py`](nexttrace/pr_review.py), [live PRs](https://github.com/AmanTechWiz/train-ticket/pulls))
+- **It acts on what the graph shows.** On every pull request, the bot looks up who calls the code being changed and posts a verdict: safe, review or risky. On three deliberately tricky PRs (an API prefix bump, a GET changed to POST, a removed endpoint), it named every service that would break: 7, 6 and 4 callers. ([`pr_review.py`](nexttrace/pr_review.py), [live PRs](https://github.com/AmanTechWiz/train-ticket/pulls))
 - **Every answer can be traced.** Each connection carries the file and line it came from, and every name in a PR review links to that line. A checker compares any agent answer with the map before it is trusted; it caught all 41 made-up citations in our test and flagged nothing in the honest answers. ([`failure.py`](nexttrace/failure.py))
 - **The AI cannot override the facts.** Gemini writes the PR review in plain words, but a note without graph evidence is thrown away, and the AI may raise the risk level but never lower it. ([`pr_review.py`](nexttrace/pr_review.py))
 
@@ -324,9 +334,6 @@ All numbers come from saved runs in [`bench/results/`](bench/results/), with the
 - **Live:** the PR bot runs on every pull request in [AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket/pulls). There is no hosted web app; the rules allow local setup instead, and the steps above take about five minutes.
 - **Demo video:** TODO (author): add the link.
 
-## Tech stack
-
-FalkorDB · Python 3.12 · [MCP Python SDK](https://py.sdk.modelcontextprotocol.io/) · GitHub Actions · Gemini API (optional, PR reviews only) · pytest · uv
 
 ## Limitations and what's next
 
@@ -352,16 +359,6 @@ All data is public or produced by this project. No personal or private data is u
 - Failure and traffic recordings: [RCAEval](https://zenodo.org/records/14590730) (Pham et al., WWW 2025), CC BY 4.0. These were recorded in a research test environment, not production.
 - Repos mapped: [Online Boutique](https://github.com/GoogleCloudPlatform/microservices-demo), [Train Ticket](https://github.com/FudanSELab/train-ticket), and the eight public repos listed in [docs/generalization.md](docs/generalization.md).
 - Service owners come only from what a repo declares (CODEOWNERS or Backstage); none are invented.
-
-## Project layout
-
-```text
-nexttrace/      mapper.py endpoints.py failure.py memory.py alarms.py pr_review.py mcp_server.py graphdb.py
-integrations/   github/nexttrace-pr-review.yml
-bench/          map_proof.py generalization.py agent_bench.py agent_trial.py, results/
-docs/           the reports linked above
-tests/          unit and integration tests (MCP over stdio, parallel agents, tenant isolation, PR review)
-```
 
 ## License
 
