@@ -17,7 +17,7 @@
 > **Live deployment and video**
 
 - **Live:** The PR bot runs on every pull request in [AmanTechWiz/train-ticket](https://github.com/AmanTechWiz/train-ticket/pulls). There is no hosted web app.
-- **Demo video:** TODO (author): add the link.
+- **Demo video (live demo):** [Watch on YouTube](https://youtu.be/_Ax1K7YO14E)
 
 
 
