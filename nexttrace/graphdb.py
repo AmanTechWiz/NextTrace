@@ -4,7 +4,7 @@ import time
 
 
 def ensure_unique(graph, label: str, prop: str, wait_s: float = 5.0) -> None:
-    """Index + unique constraint on label.prop. Without them, parallel MERGE makes duplicates (BUILD_GUIDE 3.6).
+    """Index + unique constraint on label.prop. Without them, parallel MERGE makes duplicates.
 
     Call after the graph exists: FalkorDB rejects index calls on an empty key.
     """
