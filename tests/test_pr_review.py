@@ -3,6 +3,7 @@
 Repo: web -> orders (POST /orders) -> payments (POST /pay); a leaf `audit` service nothing calls; a docs folder.
 """
 import json
+import os
 import subprocess
 import urllib.error
 
@@ -307,3 +308,15 @@ def test_base_calls_maps_base_branch_and_cleans_up(repo):
     assert ("orders", "payments", "POST", "/pay") in ok and ("web", "orders", "POST", "/orders") in ok
     assert "test_pr_review_base" not in FalkorDB().list_graphs()
     assert git(root, "worktree", "list").count("\n") == 1                             # temp worktree removed
+
+
+def test_env_file_fills_missing_values_only(tmp_path, monkeypatch):
+    env = tmp_path / ".env"
+    env.write_text('# comment\nGEMINI_API_KEY="from-file"\nexport NEXTTRACE_GEMINI_RPM=5\nNEXTTRACE_GEMINI_RPD = 20\n\nbroken line\n')
+    for k in ("GEMINI_API_KEY", "NEXTTRACE_GEMINI_RPM", "NEXTTRACE_GEMINI_RPD"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("NEXTTRACE_GEMINI_RPM", "9")                                # already set: the file must not override it
+    pr_review.load_env(env)
+    assert os.environ["GEMINI_API_KEY"] == "from-file" and os.environ["NEXTTRACE_GEMINI_RPM"] == "9"
+    assert os.environ["NEXTTRACE_GEMINI_RPD"] == "20"
+    pr_review.load_env(tmp_path / "missing.env")                                   # no file: no error

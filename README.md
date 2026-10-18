@@ -358,6 +358,22 @@ Incident tools (`triage_alarms`, `claim_incident`, `record_finding`, `resolve_in
 
 If your agent searches the code instead of using the graph, add one line to your project's `CLAUDE.md`: *"For questions about which services call or depend on each other, use the nexttrace tools on graph myapp first."*
 
+#### Gemini key and `.env` (optional, PR bot only)
+
+Only the PR bot's written review uses a model. Everything else in NextTrace runs without a key.
+
+1. Get a free key at [Google AI Studio](https://aistudio.google.com/apikey).
+2. **In GitHub Actions:** store it as a repository secret (`gh secret set GEMINI_API_KEY`, or Settings, Secrets and variables, Actions). The workflow reads it from there.
+3. **On your machine:** copy the example file and paste the key in.
+
+```bash
+cp .env.example .env        # .env is git-ignored
+# edit .env: GEMINI_API_KEY=your-key
+uv run python -m nexttrace.pr_review --repo /path/to/your-repo --base origin/main --graph pr --map
+```
+
+`pr_review` reads `.env` from the folder you run it in. Variables already set in your shell win over the file. The free tier is small, so `NEXTTRACE_GEMINI_RPM` and `NEXTTRACE_GEMINI_RPD` in `.env` cap how many requests NextTrace sends. The key is sent only to Google's Gemini API, and only when a pull request is reviewed.
+
 #### 4. B: Add the PR bot to your GitHub repo
 
 ```bash
@@ -416,7 +432,7 @@ cd /path/to/NextTrace
 uv run python -m nexttrace.pr_review --repo /path/to/your-repo --base origin/main --graph pr --map
 ```
 
-Set `GEMINI_API_KEY` in your shell to include the AI review; leave it unset for the rule-based one.
+Put `GEMINI_API_KEY` in `.env` (or your shell) to include the AI review; leave it unset for the rule-based one.
 
 </details>
 

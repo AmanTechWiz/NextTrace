@@ -582,6 +582,18 @@ def render(f, rule_v, reasons, review=None, report=None, repo_url="", sha=""):
 
 # ---------- CLI ----------
 
+def load_env(path=".env"):
+    """Read KEY=value lines from a .env file into the environment, without overriding what is already set."""
+    f = Path(path)
+    if not f.is_file():
+        return
+    for line in f.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip().removeprefix("export "), v.strip().strip("\"'"))
+
+
 def _git(root, *args):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
 
@@ -631,6 +643,7 @@ def main(argv=None):
     ap.add_argument("--sha", default="", help="commit for evidence links (default: head)")
     ap.add_argument("--no-ai", action="store_true")
     a = ap.parse_args(argv)
+    load_env()
     root = Path(a.repo).resolve()
     if a.map:
         mapper.map_repo(root, a.graph)
