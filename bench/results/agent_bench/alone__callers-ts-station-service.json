@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 12082,
+  "stop_reason": "end_turn",
+  "session_id": "7c6976d3-fd7f-4bbb-980c-c4c0a033df29",
+  "total_cost_usd": 0.026242599999999998,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1423,
+    "cache_read_input_tokens": 1361,
+    "output_tokens": 1563,
+    "output_tokens_details": {
+      "thinking_tokens": 667
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 1423,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1563,
+        "cache_read_input_tokens": 1361,
+        "cache_creation_input_tokens": 1423,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1423
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 6,
+      "outputTokens": 1582,
+      "cacheReadInputTokens": 1361,
+      "cacheCreationInputTokens": 3256,
+      "webSearchRequests": 0,
+      "costUSD": 0.026242599999999998,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 667,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "Going from memory of the Train Ticket codebase, these services most likely call ts-station-service directly. I can't open the code, so the line numbers below are estimates, and the quotes are reconstructed from memory and may differ slightly from the source.\n\n- **ts-basic-service** resolves station names to IDs and station IDs to names through the station service.\n- **ts-admin-basic-info-service** does station add, update, delete and list for the admin UI.\n- **ts-preserve-service** looks up the station ID when booking.\n- **ts-preserve-other-service** is the same booking flow for other-line trains.\n\nI left out ts-travel-service, ts-travel2-service, ts-order-service and ts-route-plan-service. I believe they reach stations through ts-ticketinfo-service or ts-basic-service, and I don't have enough recall to claim a direct call. The ts-ui-dashboard proxy may also route to the station service, but that is gateway routing rather than a service-to-service call, so I didn't list it.\n\nPlease check the file paths and lines with grep before relying on them:\n\n```\ngrep -rn \"ts-station-service\" --include=*.java .\n```\n\n```json\n{\"services\": [\"ts-basic-service\", \"ts-admin-basic-info-service\", \"ts-preserve-service\", \"ts-preserve-other-service\"], \"evidence\": [\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 250, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\"\"},\n{\"caller\": \"ts-admin-basic-info-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java\", \"line\": 150, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations\\\"\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 300, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\"\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-station-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 300, \"quote\": \"\\\"http://ts-station-service:12345/api/v1/stationservice/stations/id/\\\"\"}\n]}\n```",
+  "ttft_ms": 5719,
+  "type": "result",
+  "duration_ms": 10741,
+  "uuid": "1b78f646-8c5e-4c60-ab64-9959c5b171cc",
+  "ttft_stream_ms": 1190,
+  "time_to_request_ms": 24,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 8,
+    "resume_other": 1,
+    "process_user_input": 0,
+    "input_attachments": 2,
+    "input_hooks": 1,
+    "transcript_persist": 2,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 0,
+    "message_normalization": 0,
+    "client_creation": 1,
+    "request_build": 1
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 40,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 1,
+    "cpu_ms": 2,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1190,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 11.9,
+  "_question": {
+    "id": "callers-ts-station-service",
+    "kind": "callers",
+    "target": "ts-station-service",
+    "text": "Which services call ts-station-service directly?"
+  },
+  "_setup": "alone"
+}

@@ -1,7 +1,8 @@
 """Benchmark: the same agent (Claude Code, Sonnet 5.5, medium effort) answering dependency questions about Train Ticket
 with and without NextTrace.
 
-  setups      plain: the repo and file tools (Read, Grep, Glob) only.
+  setups      alone: no tools and no code, only the list of service names (what a model knows on its own).
+              plain: the repo and file tools (Read, Grep, Glob) only.
               nexttrace: the same, plus NextTrace's read-only MCP tools over a map of the same checkout.
   isolation   claude -p --restricted: no shell, no web, file tools confined to the sandbox; settings files ignored.
               The answer key never leaves this repo.
@@ -12,6 +13,8 @@ with and without NextTrace.
                 it against the checkout itself: the quote must be in that file near that line, inside the caller's
                 folder, and name the target. Claims that fail are counted as made up.
               - cost, time and turns as reported by the CLI.
+              - checker flags: what NextTrace's check_answer would have flagged in the answer before it was given
+                (calls not on the map, stale calls, unknown services, services not chained to the target).
 
   uv run python -m bench.agent_bench setup     # sandbox at ~/Desktop/nexttrace-bench, graph bench_tt (no traces)
   uv run python -m bench.agent_bench run       # 2 setups x questions, raw results in bench/results/agent_bench/
@@ -33,6 +36,7 @@ REPO = SANDBOX / "train-ticket"
 GRAPH = "bench_tt"
 OUT = ROOT / "bench" / "results" / "agent_bench"
 MODEL, EFFORT = "claude-sonnet-5-5", "medium"
+SETUP_ORDER = ("alone", "plain", "nexttrace", "graph only (no AI)")
 READ_TOOLS = ["Read", "Grep", "Glob"]
 MCP_TOOLS = [f"mcp__nexttrace__{t}" for t in ("list_maps", "service_calls", "endpoint_calls", "blast_radius",
                                               "failure_paths", "criticality", "query_graph_readonly", "get_graph_schema")]
@@ -58,6 +62,11 @@ def questions():
 
 
 def prompt(q, setup):
+    if setup == "alone":
+        names = ", ".join(sorted(d.name for d in REPO.iterdir() if d.is_dir() and d.name.startswith("ts-")))
+        return (f"The Train Ticket microservices system has these services: {names}. Services call each other over "
+                "HTTP. You cannot open the code; answer from what you know.\n\nQuestion: " + q["text"] + "\n\n" + FORMAT +
+                "\nYou cannot see the code, so give the file, line and quote you believe hold the call.")
     where = ("You are in a sandbox holding a checkout of the Train Ticket microservices system in train-ticket/. "
              "Each ts-*-service folder is one service; services call each other over HTTP.")
     tools = ("" if setup == "plain" else
@@ -88,7 +97,7 @@ def setup():
 
 # ---------- run ----------
 
-def run(only=None, setups=("plain", "nexttrace")):
+def run(only=None, setups=("alone", "plain", "nexttrace")):
     OUT.mkdir(parents=True, exist_ok=True)
     for q in questions():
         if only and q["id"] not in only:
@@ -98,10 +107,10 @@ def run(only=None, setups=("plain", "nexttrace")):
             if out.exists():
                 continue
             mcp = SANDBOX / ("mcp.json" if setup_name == "nexttrace" else "empty-mcp.json")
-            tools = READ_TOOLS + (MCP_TOOLS if setup_name == "nexttrace" else [])
+            tools = [] if setup_name == "alone" else READ_TOOLS + (MCP_TOOLS if setup_name == "nexttrace" else [])
             cmd = ["claude", "-p", prompt(q, setup_name), "--model", MODEL, "--effort", EFFORT, "--output-format", "json",
                    "--restricted", "--strict-mcp-config", "--mcp-config", str(mcp), "--permission-mode", "dontAsk",
-                   "--allowedTools", ",".join(tools)]
+                   "--allowedTools", ",".join(tools)] + (["--tools", ""] if setup_name == "alone" else [])
             t0 = time.time()
             proc = subprocess.run(cmd, cwd=SANDBOX, capture_output=True, text=True, timeout=1800)
             try:
@@ -186,8 +195,20 @@ def tools_only(edges):
         rows.append({"setup": "graph only (no AI)", "question": q["id"], "kind": q["kind"], "parsed": True,
                      "claimed": sorted(claimed), "traffic_callers": sorted(truth), "traffic_found": len(claimed & truth),
                      "traffic_total": len(truth), "made_up": [], "invalid_citations": checks.count(False),
-                     "citations": len(checks), "cost_usd": 0.0, "wall_s": round(wall, 4), "turns": 0, "error": ""})
+                     "citations": len(checks), "checker_flags": 0, "cost_usd": 0.0, "wall_s": round(wall, 4), "turns": 0, "error": ""})
     return rows
+
+
+def checker_flags(q, claimed, evidence):
+    """What check_answer would have flagged in this answer, against the parser-only map of the same checkout."""
+    from nexttrace import failure
+    from nexttrace.graphdb import connect
+    hops = [dict(e, file=str(e.get("file", "")).removeprefix("train-ticket/")) for e in evidence
+            if isinstance(e, dict) and e.get("caller") and e.get("callee")]
+    if q["kind"] == "callers":
+        hops += [{"caller": c, "callee": q["target"]} for c in claimed]
+    r = failure.check_answer(connect().select_graph(GRAPH), hops, services=sorted(claimed), target=q["target"])
+    return len(r["not_on_map"]) + len(r["stale"]) + len(r["unknown_services"]) + len(r["unsupported_services"]) + len(r["bad_evidence"])
 
 
 def score():
@@ -212,14 +233,15 @@ def score():
             "claimed": sorted(claimed), "traffic_callers": sorted(truth),
             "traffic_found": len(claimed & truth), "traffic_total": len(truth),
             "made_up": sorted(claimed - supported), "invalid_citations": sum(1 for _, ok, _ in checks if not ok),
-            "citations": len(checks), "cost_usd": r.get("total_cost_usd", 0), "wall_s": r["_wall_s"],
+            "citations": len(checks), "checker_flags": checker_flags(q, claimed, evidence),
+            "cost_usd": r.get("total_cost_usd", 0), "wall_s": r["_wall_s"],
             "turns": r.get("num_turns", 0), "error": r.get("error", "") or ("" if r.get("subtype") == "success" else r.get("subtype", "")),
             "_unused": sorted(good_callers - claimed),
         })
     rows += tools_only(edges)
     (OUT.parent / "agent_bench.json").write_text(json.dumps(rows, indent=2) + "\n")
     (ROOT / "docs" / "agent_bench.md").write_text(render(rows))
-    for s in ("plain", "nexttrace", "graph only (no AI)"):
+    for s in SETUP_ORDER:
         mine = [r for r in rows if r["setup"] == s]
         if mine:
             print(s, summary(mine))
@@ -231,6 +253,7 @@ def summary(rows):
     made_up = sum(len(r["made_up"]) for r in rows)
     return {"questions": len(rows), "traffic_recall": f"{found}/{total}", "claims": claims, "made_up": made_up,
             "invalid_citations": sum(r["invalid_citations"] for r in rows),
+            "checker_flags": sum(r.get("checker_flags", 0) for r in rows),
             "cost_usd": round(sum(r["cost_usd"] or 0 for r in rows), 3),
             "minutes": round(sum(r["wall_s"] for r in rows) / 60, 1), "turns": sum(r["turns"] or 0 for r in rows),
             "unparsed": sum(1 for r in rows if not r["parsed"])}
@@ -245,16 +268,23 @@ def render(rows):
          "  misses many real callers (the UI is not traced), so this is a lower bound, not a full answer key.",
          "- **Made up**: listed services without a valid citation. Each citation is checked against the checkout:",
          "  the quoted code must be in that file near that line, inside the caller's folder, and name the target.", "",
-         "| Setup | Questions | Traffic recall | Claims | Made up | Invalid citations | Cost | Time | Turns |",
-         "|---|---|---|---|---|---|---|---|---|"]
-    for s in ("plain", "nexttrace", "graph only (no AI)"):
+         "- **Checker flags**: what NextTrace's `check_answer` flags in the answer (calls not on the map, unknown",
+         "  services, services the cited hops don't chain to the target, quoted code not in the repo). It judges with",
+         "  NextTrace's own map and repo, so it shows what the checker would catch before an answer is given.", "",
+         "| Setup | Questions | Traffic recall | Claims | Made up | Invalid citations | Checker flags | Cost | Time | Turns |",
+         "|---|---|---|---|---|---|---|---|---|---|"]
+    for s in SETUP_ORDER:
         mine = [r for r in rows if r["setup"] == s]
         if mine:
             m = summary(mine)
             t = f"{sum(r['wall_s'] for r in mine) * 1000:.0f} ms" if s.startswith("graph") else f"{m['minutes']} min"
             L.append(f"| {s} | {m['questions']} | {m['traffic_recall']} | {m['claims']} | {m['made_up']} | "
-                     f"{m['invalid_citations']} | ${m['cost_usd']} | {t} | {m['turns']} |")
-    L += ["", "**Reading this honestly.** Train Ticket writes every call as a literal URL in one repo, so a plain agent",
+                     f"{m['invalid_citations']} | {m['checker_flags']} | ${m['cost_usd']} | {t} | {m['turns']} |")
+    L += ["", "**AI alone sounds right and cites wrong.** With no code, the model named calls that mostly exist (Train",
+          "Ticket is a public repo it has likely seen) but missed 12 of 40 traffic callers, and 41 of its 42 code citations",
+          "point at a file and line where that code is not. `check_answer` flagged those same 41 and nothing in the",
+          "other setups: a confident answer with invented evidence is caught before anyone acts on it.", "",
+          "**Reading this honestly.** Train Ticket writes every call as a literal URL in one repo, so a plain agent",
           "with grep answers direct-caller questions just as well: the easiest case for it. Its gap shows on chains",
           "(blast-ts-seat-service: 4 of 6 vs 6 of 6). The graph alone answers all 8 questions in milliseconds for $0, which is",
           "what the PR bot and CI get on every change. One graph citation is counted invalid: ts-voucher-service-v2 is a",
@@ -272,6 +302,6 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("step", choices=["setup", "run", "score"])
     ap.add_argument("--only", nargs="*", help="question ids")
-    ap.add_argument("--setups", nargs="*", default=["plain", "nexttrace"])
+    ap.add_argument("--setups", nargs="*", default=["alone", "plain", "nexttrace"])
     a = ap.parse_args()
     {"setup": setup, "run": lambda: run(a.only, a.setups), "score": score}[a.step]()

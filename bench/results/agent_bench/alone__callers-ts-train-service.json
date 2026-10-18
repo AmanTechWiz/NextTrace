@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 12348,
+  "stop_reason": "end_turn",
+  "session_id": "43823099-1838-4225-b3d0-9ca63bcea84e",
+  "total_cost_usd": 0.0261066,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1419,
+    "cache_read_input_tokens": 1361,
+    "output_tokens": 1551,
+    "output_tokens_details": {
+      "thinking_tokens": 541
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 1419,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 1551,
+        "cache_read_input_tokens": 1361,
+        "cache_creation_input_tokens": 1419,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1419
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 6,
+      "outputTokens": 1570,
+      "cacheReadInputTokens": 1361,
+      "cacheCreationInputTokens": 3252,
+      "webSearchRequests": 0,
+      "costUSD": 0.0261066,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 541,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "I can't open the code here, so this answer comes from my memory of the Train Ticket repo. The file paths, line numbers and quotes below are my best recollection, not verified. Treat the line numbers especially as approximate and check them with `grep -rn \"ts-train-service\" --include=*.java`.\n\n**Callers of ts-train-service I'm fairly confident about**\n\n- **ts-basic-service**: `BasicServiceImpl` fetches train type details when it builds a travel result. I recall the call being `restTemplate.exchange(\"http://ts-train-service:14567/api/v1/trainservice/trains/byName/\" + trainTypeName, ...)`, but I'm not sure of the line.\n- **ts-travel-service** and **ts-travel2-service**: `TravelServiceImpl` looks up the train type by name when it queries trips and seat counts. This is the same `trains/byName` URL, but the lines are a guess.\n- **ts-admin-basic-info-service**: `AdminBasicInfoServiceImpl` handles train CRUD for the admin UI, forwarding to `http://ts-train-service:14567/api/v1/trainservice/trains`. The line is a guess.\n\n**Not listed**\n\n- **ts-seat-service** may call it too, but I'm not confident enough to include it.\n- Some versions route the travel lookups through ts-basic-service instead of calling ts-train-service directly. That could affect the travel and travel2 entries.\n\n```json\n{\"services\": [\"ts-basic-service\", \"ts-travel-service\", \"ts-travel2-service\", \"ts-admin-basic-info-service\"], \"evidence\": [\n{\"caller\": \"ts-basic-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-basic-service/src/main/java/fdse/microservice/service/BasicServiceImpl.java\", \"line\": 250, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/byName/\\\" + trainTypeName\"},\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 600, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/byName/\\\" + trainTypeName\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/TravelServiceImpl.java\", \"line\": 600, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains/byName/\\\" + trainTypeName\"},\n{\"caller\": \"ts-admin-basic-info-service\", \"callee\": \"ts-train-service\", \"file\": \"ts-admin-basic-info-service/src/main/java/adminbasic/service/AdminBasicInfoServiceImpl.java\", \"line\": 300, \"quote\": \"\\\"http://ts-train-service:14567/api/v1/trainservice/trains\\\"\"}\n]}\n```",
+  "ttft_ms": 5350,
+  "type": "result",
+  "duration_ms": 11055,
+  "uuid": "f3090272-e824-45b2-9b9d-cf3b3fd43adc",
+  "ttft_stream_ms": 1350,
+  "time_to_request_ms": 21,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 7,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 2,
+    "input_hooks": 0,
+    "transcript_persist": 3,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 0,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 1,
+    "query_setup": 0,
+    "model_gates": 0,
+    "tool_schema_build": 0,
+    "message_normalization": 0,
+    "client_creation": 1,
+    "request_build": 0
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 35,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 1,
+    "cpu_ms": 2,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1350,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 12.1,
+  "_question": {
+    "id": "callers-ts-train-service",
+    "kind": "callers",
+    "target": "ts-train-service",
+    "text": "Which services call ts-train-service directly?"
+  },
+  "_setup": "alone"
+}

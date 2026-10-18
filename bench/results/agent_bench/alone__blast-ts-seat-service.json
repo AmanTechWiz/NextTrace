@@ -1,0 +1,139 @@
+{
+  "duration_api_ms": 16993,
+  "stop_reason": "end_turn",
+  "session_id": "bb5a4eb0-59c4-4e66-b79e-6613f66a86b5",
+  "total_cost_usd": 0.034207600000000005,
+  "usage": {
+    "input_tokens": 2,
+    "cache_creation_input_tokens": 1438,
+    "cache_read_input_tokens": 1361,
+    "output_tokens": 2344,
+    "output_tokens_details": {
+      "thinking_tokens": 738
+    },
+    "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+      "ephemeral_1h_input_tokens": 1438,
+      "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "global",
+    "iterations": [
+      {
+        "input_tokens": 2,
+        "output_tokens": 2344,
+        "cache_read_input_tokens": 1361,
+        "cache_creation_input_tokens": 1438,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 1438
+        },
+        "type": "message"
+      }
+    ],
+    "speed": "standard",
+    "fallback_credit": null
+  },
+  "modelUsage": {
+    "claude-sonnet-5-5": {
+      "inputTokens": 6,
+      "outputTokens": 2369,
+      "cacheReadInputTokens": 1361,
+      "cacheCreationInputTokens": 3285,
+      "webSearchRequests": 0,
+      "costUSD": 0.034207600000000005,
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "thinkingTokens": 738,
+      "canonicalModel": "claude-sonnet-5-5",
+      "provider": "firstParty",
+      "costBasis": "list"
+    }
+  },
+  "permission_denials": [],
+  "terminal_reason": "completed",
+  "fast_mode_state": "off",
+  "fast_mode_disabled_reason": "extra_usage_disabled",
+  "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+      "background": 0,
+      "foreground": 0,
+      "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+      "parent": 0,
+      "user": 0,
+      "system": 0
+    },
+    "refused": {
+      "depth_limit": 0,
+      "concurrency_limit": 0,
+      "budget": 0
+    },
+    "by_type": {}
+  },
+  "safety_stops": 0,
+  "is_error": false,
+  "num_turns": 1,
+  "subtype": "success",
+  "api_error_status": null,
+  "result": "I can't open the code here, so the files, lines and quotes below are from memory of the Train Ticket repo. I haven't verified the line numbers, so check them before relying on them.\n\n**Direct callers of ts-seat-service**\n- ts-travel-service calls it to get the remaining ticket count in `TravelServiceImpl`.\n- ts-travel2-service does the same in its own `TravelServiceImpl`.\n- ts-preserve-service calls it to assign seats when a ticket is booked.\n- ts-preserve-other-service makes the same call for the other-order flow.\n\n**Indirect callers (through ts-travel-service or ts-travel2-service)**\n- ts-travel-plan-service calls ts-travel-service and ts-travel2-service for trip details and remaining tickets.\n- ts-route-plan-service calls ts-travel-service for trip details.\n\nI left out ts-rebook-service and ts-admin-travel-service. I believe they depend on travel, but I'm not confident enough in the exact call sites to cite them.\n\n```json\n{\"services\": [\"ts-travel-service\", \"ts-travel2-service\", \"ts-preserve-service\", \"ts-preserve-other-service\", \"ts-travel-plan-service\", \"ts-route-plan-service\"], \"evidence\": [\n{\"caller\": \"ts-travel-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-travel-service/src/main/java/travel/service/TravelServiceImpl.java\", \"line\": 540, \"quote\": \"restTemplate.exchange(\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\", HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Response<Integer>>() {});\"},\n{\"caller\": \"ts-travel2-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-travel2-service/src/main/java/travel2/service/TravelServiceImpl.java\", \"line\": 530, \"quote\": \"restTemplate.exchange(\\\"http://ts-seat-service:18898/api/v1/seatservice/seats/left_tickets\\\", HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Response<Integer>>() {});\"},\n{\"caller\": \"ts-preserve-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-preserve-service/src/main/java/preserve/service/PreserveServiceImpl.java\", \"line\": 150, \"quote\": \"restTemplate.exchange(\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\", HttpMethod.POST, requestEntityTicket, new ParameterizedTypeReference<Response<Ticket>>() {});\"},\n{\"caller\": \"ts-preserve-other-service\", \"callee\": \"ts-seat-service\", \"file\": \"ts-preserve-other-service/src/main/java/preserveOther/service/PreserveOtherServiceImpl.java\", \"line\": 150, \"quote\": \"restTemplate.exchange(\\\"http://ts-seat-service:18898/api/v1/seatservice/seats\\\", HttpMethod.POST, requestEntityTicket, new ParameterizedTypeReference<Response<Ticket>>() {});\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 200, \"quote\": \"restTemplate.exchange(\\\"http://ts-travel-service:12346/api/v1/travelservice/trip_detail\\\", HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Response<TripAllDetail>>() {});\"},\n{\"caller\": \"ts-travel-plan-service\", \"callee\": \"ts-travel2-service\", \"file\": \"ts-travel-plan-service/src/main/java/travelplan/service/TravelPlanServiceImpl.java\", \"line\": 215, \"quote\": \"restTemplate.exchange(\\\"http://ts-travel2-service:16346/api/v1/travel2service/trip_detail\\\", HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Response<TripAllDetail>>() {});\"},\n{\"caller\": \"ts-route-plan-service\", \"callee\": \"ts-travel-service\", \"file\": \"ts-route-plan-service/src/main/java/routeplan/service/RoutePlanServiceImpl.java\", \"line\": 120, \"quote\": \"restTemplate.exchange(\\\"http://ts-travel-service:12346/api/v1/travelservice/trips/left\\\", HttpMethod.POST, requestEntity, new ParameterizedTypeReference<Response<ArrayList<TripResponse>>>() {});\"}\n]}\n```",
+  "ttft_ms": 7208,
+  "type": "result",
+  "duration_ms": 15514,
+  "uuid": "9e88d10d-da77-4da8-a5af-4b605df86271",
+  "ttft_stream_ms": 1348,
+  "time_to_request_ms": 21,
+  "time_to_request_phases_ms": {
+    "other": 4,
+    "system_prompt": 8,
+    "resume_other": 0,
+    "process_user_input": 1,
+    "input_attachments": 1,
+    "input_hooks": 1,
+    "transcript_persist": 1,
+    "tool_pool_refresh": 1,
+    "init_message": 1,
+    "engine_pickup": 1,
+    "message_prep": 0,
+    "model_config_wait": 0,
+    "autocompact": 0,
+    "query_setup": 1,
+    "model_gates": 0,
+    "tool_schema_build": 0,
+    "message_normalization": 0,
+    "client_creation": 0,
+    "request_build": 1
+  },
+  "turn_start_resume_kind": "none",
+  "process_turn_index": 0,
+  "time_to_request_loop_lag_ms": 0,
+  "time_to_request_cpu_ms": 38,
+  "time_to_request_major_faults": 0,
+  "input_attachments_detail": {
+    "slowest_producer": "queued_commands",
+    "slowest_producer_ms": 1,
+    "cpu_ms": 2,
+    "major_faults": 0
+  },
+  "first_content_frame_ms": 1348,
+  "queued_turn_count": 0,
+  "result_index": 0,
+  "_wall_s": 16.5,
+  "_question": {
+    "id": "blast-ts-seat-service",
+    "kind": "blast",
+    "target": "ts-seat-service",
+    "text": "If ts-seat-service fails, which services break, directly or through other services that depend on it?"
+  },
+  "_setup": "alone"
+}
