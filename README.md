@@ -39,7 +39,7 @@ So an engineer renames an endpoint and a booking flow in another team's service 
 - **Lets AI agents extend the map, but only with proof.** An agent can add a connection or service only if the quoted code really exists at that line. The server checks it, and checks agents' answers too.
 - **Remembers incidents across agents and sessions.** Alarms become incidents, agents hand them off through version-checked claims, the cause must cite live map connections, and fixes are recalled the next time.
 
-## Why a graph (the removal test)
+## Why a graph?
 
 If FalkorDB were removed, the product would stop working. These are not lookups that a table or a vector index would do just as well:
 
