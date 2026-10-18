@@ -96,6 +96,120 @@ flowchart LR
 - **The MCP server** ([`nexttrace/mcp_server.py`](nexttrace/mcp_server.py)) exposes everything to the agent the user already runs. No model runs inside NextTrace for these tools.
 - **The PR bot** ([`integrations/github/nexttrace-pr-review.yml`](integrations/github/nexttrace-pr-review.yml)) starts FalkorDB as a service container, maps the PR head, and posts or updates one comment. The only place NextTrace calls a model is here, with the user's own Gemini key, and it works without one.
 
+### Graph data model
+
+```mermaid
+flowchart LR
+  classDef map fill:#ede9fe,stroke:#6d28d9,color:#111111
+  classDef mem fill:#fef3c7,stroke:#b45309,color:#111111
+
+  S["Service"]:::map
+  E["Endpoint"]:::map
+  R["MapRun"]:::map
+  A["Alarm"]:::mem
+  I["Incident"]:::mem
+  B["Runbook"]:::mem
+  V["Event"]:::mem
+  X["Session"]:::mem
+  T["Step"]:::mem
+
+  S -- CALLS --> S
+  S -- EXPOSES --> E
+  S -- CALLS_ENDPOINT --> E
+  A -- ON --> S
+  I -- HAS_ALARM --> A
+  I -- AFFECTS --> S
+  I -- CAUSED_BY --> S
+  I -- FIXED_BY --> B
+  V -- OF --> I
+  T -- IN --> X
+```
+
+`MapRun` records each mapping run (repo, root, commit) and stands alone.
+
+<details>
+<summary>Key properties</summary>
+
+| Element | Properties |
+|---|---|
+| `Service` | `name` (unique), `kind` (service, datastore, infra, other), `source_dir`, `declared_in`, `owner`, `repo`, `origin` (scanner or ai), `images`, `stale` |
+| `CALLS` | `sources` (trace, config, code, ai), `confidence` (high, medium, inferred), `evidence[]` (`kind \| file:line \| quote`), `evidence_count`, `last_run`, `stale` |
+| `Endpoint` | `key` (unique), `service`, `method`, `path`, `where` (`file:line`), `declared`, `stale` |
+| `CALLS_ENDPOINT` | `evidence[]`, `matched` (the call fits a declared route) |
+| `MapRun` | `run`, `repo`, `root`, `commit`, `services`, `calls` |
+| `Alarm` | `key` (unique), `service`, `signal`, `at` |
+| `Incident` | `id`, `key` (unique), `title`, `status`, `version`, `owner`, `reason`, `evidence[]`, `fix` |
+| `Runbook` | `key` (unique), `steps`, `attempts`, `successes` |
+| `Event` | `seq`, `at`, `agent`, `action`, `from_status`, `to_status`, `note` |
+| `Session` / `Step` | `id`, `agent`, `task` / `seq`, `at`, `tool`, `input`, `output`, `incident` |
+
+One graph per team or system. Unique constraints on `Service.name`, `Endpoint.key`, `Alarm.key`, `Incident.key`, `Runbook.key` and `Session.id` are created before any agent writes.
+
+</details>
+
+### Cypher queries and algorithms
+
+**Graph algorithms the product depends on**
+
+| Algorithm | Where it runs | What it answers |
+|---|---|---|
+| **PageRank** (`algo.pageRank`) | FalkorDB, built in | Which services matter most because important services call them. Used to rank services in `criticality` and in PR reviews. |
+| **Betweenness centrality** (`algo.betweenness`, every source, not sampled) | FalkorDB, built in | Which services sit on the most call chains: bridges and single points of failure. |
+| **Reverse breadth-first traversal with shortest chains** (variable-length paths `[:CALLS*1..6]`, ordered by length) | FalkorDB, Cypher | Everything that breaks if a service fails, each with the shortest chain that links it (blast radius). The same pattern, forward, finds how requests reach a service from the entry points (`failure_paths`). |
+| **Reachability plus connected components** (undirected `[:CALLS*1..3]` paths, then union-find) | FalkorDB for the paths, Python for the grouping | Which alarms belong to one incident: alarms on services linked within three calls become one incident, unrelated ones stay separate. |
+| **Jaccard similarity** over the services two incidents affect | Python, on graph results | Which past incidents look like this one, and what fixed them. |
+| **Compare and swap** on a version property | FalkorDB, Cypher | Which agent wins when several try to take the same incident: exactly one. |
+| **Route template matching** (method plus path, with `{id}`, `:id` and `<id>` parameters) | Python, while mapping | Which declared route each call site reaches, so a renamed or removed route shows its callers. |
+
+**The queries behind them**
+
+**What breaks if a service fails?** Every caller up to 6 hops away, its shortest chain, and the evidence for every hop. Removed calls are skipped.
+
+```cypher
+MATCH (s:Service {name: $n})
+MATCH p = (x:Service)-[:CALLS*1..6]->(s)
+WHERE x <> s AND all(r IN relationships(p) WHERE NOT coalesce(r.stale, false))
+WITH x, p ORDER BY length(p), [n IN nodes(p) | n.name]
+WITH x, collect(p)[0] AS p
+RETURN x.name, x.owner, length(p),
+       [i IN range(0, length(p) - 1) | {caller: nodes(p)[i].name, callee: nodes(p)[i + 1].name,
+        confidence: relationships(p)[i].confidence, evidence: relationships(p)[i].evidence[0]}]
+```
+
+**Which services matter most?** FalkorDB's built-in algorithms, run over the whole map.
+
+```cypher
+CALL algo.pageRank('Service', 'CALLS') YIELD node, score RETURN node.name, score;
+CALL algo.betweenness({nodeLabels: ['Service'], relationshipTypes: ['CALLS'], samplingSize: $n, samplingSeed: 1})
+YIELD node, score RETURN node.name, score
+```
+
+**Who calls a route that no longer exists?** The PR bot's strongest signal: calls into or out of the changed services that match no declared route.
+
+```cypher
+MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint)
+WHERE (e.service IN $s OR c.name IN $s)
+  AND (NOT coalesce(e.declared, true) OR coalesce(e.stale, false))
+  AND NOT coalesce(x.stale, false)
+RETURN c.name, e.method, e.path, e.service, x.evidence[0]
+```
+
+**Hand an incident to the next agent.** Compare and swap on a version number, so exactly one of several racing agents wins.
+
+```cypher
+MATCH (i:Incident {id: $id}) WHERE i.status = $from AND i.version = $v
+SET i.status = $to, i.version = $v + 1, i.owner = $agent, i.updated_at = $at
+RETURN i.version
+```
+
+**Is this answer backed by the map?** Every call an agent's answer relies on, looked up as stored.
+
+```cypher
+UNWIND $p AS p
+MATCH (a:Service {name: p[0]})-[c:CALLS]->(b:Service {name: p[1]})
+RETURN a.name, b.name, c.confidence, c.evidence[0], coalesce(c.stale, false)
+```
+
 ## Project layout
 
 ```text
@@ -282,119 +396,6 @@ Set `GEMINI_API_KEY` in your shell to include the AI review; leave it unset for 
 
 </details>
 
-### Graph data model
-
-```mermaid
-flowchart LR
-  classDef map fill:#ede9fe,stroke:#6d28d9,color:#111111
-  classDef mem fill:#fef3c7,stroke:#b45309,color:#111111
-
-  S["Service"]:::map
-  E["Endpoint"]:::map
-  R["MapRun"]:::map
-  A["Alarm"]:::mem
-  I["Incident"]:::mem
-  B["Runbook"]:::mem
-  V["Event"]:::mem
-  X["Session"]:::mem
-  T["Step"]:::mem
-
-  S -- CALLS --> S
-  S -- EXPOSES --> E
-  S -- CALLS_ENDPOINT --> E
-  A -- ON --> S
-  I -- HAS_ALARM --> A
-  I -- AFFECTS --> S
-  I -- CAUSED_BY --> S
-  I -- FIXED_BY --> B
-  V -- OF --> I
-  T -- IN --> X
-```
-
-`MapRun` records each mapping run (repo, root, commit) and stands alone.
-
-<details>
-<summary>Key properties</summary>
-
-| Element | Properties |
-|---|---|
-| `Service` | `name` (unique), `kind` (service, datastore, infra, other), `source_dir`, `declared_in`, `owner`, `repo`, `origin` (scanner or ai), `images`, `stale` |
-| `CALLS` | `sources` (trace, config, code, ai), `confidence` (high, medium, inferred), `evidence[]` (`kind \| file:line \| quote`), `evidence_count`, `last_run`, `stale` |
-| `Endpoint` | `key` (unique), `service`, `method`, `path`, `where` (`file:line`), `declared`, `stale` |
-| `CALLS_ENDPOINT` | `evidence[]`, `matched` (the call fits a declared route) |
-| `MapRun` | `run`, `repo`, `root`, `commit`, `services`, `calls` |
-| `Alarm` | `key` (unique), `service`, `signal`, `at` |
-| `Incident` | `id`, `key` (unique), `title`, `status`, `version`, `owner`, `reason`, `evidence[]`, `fix` |
-| `Runbook` | `key` (unique), `steps`, `attempts`, `successes` |
-| `Event` | `seq`, `at`, `agent`, `action`, `from_status`, `to_status`, `note` |
-| `Session` / `Step` | `id`, `agent`, `task` / `seq`, `at`, `tool`, `input`, `output`, `incident` |
-
-One graph per team or system. Unique constraints on `Service.name`, `Endpoint.key`, `Alarm.key`, `Incident.key`, `Runbook.key` and `Session.id` are created before any agent writes.
-
-</details>
-
-### Cypher queries and algorithms
-
-**Graph algorithms the product depends on**
-
-| Algorithm | Where it runs | What it answers |
-|---|---|---|
-| **PageRank** (`algo.pageRank`) | FalkorDB, built in | Which services matter most because important services call them. Used to rank services in `criticality` and in PR reviews. |
-| **Betweenness centrality** (`algo.betweenness`, every source, not sampled) | FalkorDB, built in | Which services sit on the most call chains: bridges and single points of failure. |
-| **Reverse breadth-first traversal with shortest chains** (variable-length paths `[:CALLS*1..6]`, ordered by length) | FalkorDB, Cypher | Everything that breaks if a service fails, each with the shortest chain that links it (blast radius). The same pattern, forward, finds how requests reach a service from the entry points (`failure_paths`). |
-| **Reachability plus connected components** (undirected `[:CALLS*1..3]` paths, then union-find) | FalkorDB for the paths, Python for the grouping | Which alarms belong to one incident: alarms on services linked within three calls become one incident, unrelated ones stay separate. |
-| **Jaccard similarity** over the services two incidents affect | Python, on graph results | Which past incidents look like this one, and what fixed them. |
-| **Compare and swap** on a version property | FalkorDB, Cypher | Which agent wins when several try to take the same incident: exactly one. |
-| **Route template matching** (method plus path, with `{id}`, `:id` and `<id>` parameters) | Python, while mapping | Which declared route each call site reaches, so a renamed or removed route shows its callers. |
-
-**The queries behind them**
-
-**What breaks if a service fails?** Every caller up to 6 hops away, its shortest chain, and the evidence for every hop. Removed calls are skipped.
-
-```cypher
-MATCH (s:Service {name: $n})
-MATCH p = (x:Service)-[:CALLS*1..6]->(s)
-WHERE x <> s AND all(r IN relationships(p) WHERE NOT coalesce(r.stale, false))
-WITH x, p ORDER BY length(p), [n IN nodes(p) | n.name]
-WITH x, collect(p)[0] AS p
-RETURN x.name, x.owner, length(p),
-       [i IN range(0, length(p) - 1) | {caller: nodes(p)[i].name, callee: nodes(p)[i + 1].name,
-        confidence: relationships(p)[i].confidence, evidence: relationships(p)[i].evidence[0]}]
-```
-
-**Which services matter most?** FalkorDB's built-in algorithms, run over the whole map.
-
-```cypher
-CALL algo.pageRank('Service', 'CALLS') YIELD node, score RETURN node.name, score;
-CALL algo.betweenness({nodeLabels: ['Service'], relationshipTypes: ['CALLS'], samplingSize: $n, samplingSeed: 1})
-YIELD node, score RETURN node.name, score
-```
-
-**Who calls a route that no longer exists?** The PR bot's strongest signal: calls into or out of the changed services that match no declared route.
-
-```cypher
-MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e:Endpoint)
-WHERE (e.service IN $s OR c.name IN $s)
-  AND (NOT coalesce(e.declared, true) OR coalesce(e.stale, false))
-  AND NOT coalesce(x.stale, false)
-RETURN c.name, e.method, e.path, e.service, x.evidence[0]
-```
-
-**Hand an incident to the next agent.** Compare and swap on a version number, so exactly one of several racing agents wins.
-
-```cypher
-MATCH (i:Incident {id: $id}) WHERE i.status = $from AND i.version = $v
-SET i.status = $to, i.version = $v + 1, i.owner = $agent, i.updated_at = $at
-RETURN i.version
-```
-
-**Is this answer backed by the map?** Every call an agent's answer relies on, looked up as stored.
-
-```cypher
-UNWIND $p AS p
-MATCH (a:Service {name: p[0]})-[c:CALLS]->(b:Service {name: p[1]})
-RETURN a.name, b.name, c.confidence, c.evidence[0], coalesce(c.stale, false)
-```
 
 ### AI assistants used
 
