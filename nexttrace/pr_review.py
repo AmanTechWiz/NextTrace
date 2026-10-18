@@ -62,8 +62,79 @@ def _in_diff(diff, path, sign):
     return bool(seg) and any(l.startswith(sign) and not l.startswith(sign * 3) and seg in l for l in diff.splitlines())
 
 
-def facts(g, files, diff=""):
+HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+FUNC = [re.compile(p) for p in (
+    r"^\s*(?:async\s+)?def\s+(\w+)",                                         # Python
+    r"^func\s+(?:\([^)]*\)\s*)?(\w+)",                                        # Go
+    r"\bfunction\s*\*?\s*(\w+)\s*\(",                                           # JS/TS
+    r"^\s*(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|\w+)\s*=>",  # JS/TS arrow
+    r"^\s*(?:(?:public|private|protected|internal|static|final|override|abstract|async|virtual|synchronized|suspend|fun)"
+    r"\s+)+[\w<>\[\],.?\s]*?\b(\w+)\s*\(",                                       # Java/C#/Kotlin method
+    r"^\s*(?:async\s+)?(\w+)\s*\([^)]*\)\s*\{",                                  # JS/TS class method
+)]
+NOT_FUNC = {"if", "for", "while", "switch", "catch", "return", "new", "else", "try", "synchronized", "function"}
+
+
+def changed_lines(diff):
+    """{file: sorted new-side line numbers the diff adds or deletes at}"""
+    out, file, n = {}, None, 0
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            file = line[6:] if line.startswith("+++ b/") else None
+        elif m := HUNK.match(line):
+            n = int(m.group(1))
+        elif file and line.startswith("+"):
+            out.setdefault(file, set()).add(n)
+            n += 1
+        elif file and line.startswith("-"):
+            out.setdefault(file, set()).add(n)
+        elif file and line.startswith(" "):
+            n += 1
+    return {f: sorted(v) for f, v in out.items()}
+
+
+def _read(root, rel):
+    try:
+        return (Path(root) / rel).read_text(errors="ignore").splitlines() if root else []
+    except OSError:
+        return []
+
+
+def enclosing_functions(text, lines, limit=6):
+    """Names of the functions/methods holding these line numbers (nearest signature above each line)."""
+    names = []
+    for n in lines:
+        start = min(n, len(text)) - 1
+        while 0 <= start < len(text) - 1 and text[start].lstrip().startswith("@"):  # decorator/annotation: its function is below
+            start += 1
+        for i in range(start, -1, -1):
+            m = next((m for p in FUNC if (m := p.search(text[i]))), None)
+            if m and m.group(1) not in NOT_FUNC:
+                if m.group(1) not in names:
+                    names.append(m.group(1))
+                break
+    return names[:limit]
+
+
+def _snippet(root, evidence, around=3):
+    """The caller's code around an evidence line ('kind | path:line | quote'), for the reviewer and the model."""
+    parts = (evidence or "").split(" | ", 2)
+    if len(parts) < 2 or ":" not in parts[1]:
+        return ""
+    path, line = parts[1].rsplit(":", 1)
+    text = _read(root, path)
+    if not text or not line.isdigit():
+        return ""
+    n = int(line)
+    return "\n".join(text[max(0, n - 1 - around):n + around])
+
+
+def facts(g, files, diff="", root=None):
     touched, unowned = changed_services(g, files)
+    if root is None:
+        r = g.ro_query("MATCH (r:MapRun) RETURN r.root ORDER BY r.run DESC LIMIT 1").result_set
+        root = r[0][0] if r else None
+    lines_by_file = changed_lines(diff)
     names = sorted(touched)[:MAX_SERVICES]
     out = {"files": list(files), "unowned_files": unowned, "services": [], "connections": [], "routes": [], "broken": [],
            "incidents": [], "truncated_services": max(0, len(touched) - MAX_SERVICES)}
@@ -83,6 +154,8 @@ def facts(g, files, diff=""):
                         {"k": b["kind"]}).result_set[0][0]
         out["services"].append({
             "id": f"S{i}", "service": n, "owner": b["owner"], "changed_files": touched[n],
+            "changed_functions": {f: fn for f in touched[n]
+                                  if (fn := enclosing_functions(_read(root, f), lines_by_file.get(f, [])))},
             "dependents": rank["dependents"], "rank": rank["rank"], "of": of, "kind": b["kind"], "betweenness": rank["betweenness"],
             "pagerank": rank["pagerank"], "entry_points_hit": b["entry_points_hit"],
             "owners_to_notify": b["owners_to_notify"],
@@ -93,15 +166,23 @@ def facts(g, files, diff=""):
                       for callee, conf, ev in g.ro_query(
                           "MATCH (s:Service {name: $n})-[c:CALLS]->(t:Service) WHERE NOT coalesce(c.stale, false) "
                           "RETURN t.name, c.confidence, c.evidence[0] ORDER BY t.name", {"n": n}).result_set]})
-    changed = set(files)
+    # a route is changed when a changed line falls in its handler: from its declaration to the next route in the file
+    declared = {}
     for e_path, method, path, svc, callers in g.ro_query(
-            "MATCH (s:Service)-[:EXPOSES]->(e:Endpoint) WHERE NOT coalesce(e.stale, false) "
+            "MATCH (s:Service)-[:EXPOSES]->(e:Endpoint) WHERE NOT coalesce(e.stale, false) AND e.where IS NOT NULL "
             "OPTIONAL MATCH (c:Service)-[x:CALLS_ENDPOINT]->(e) WHERE NOT coalesce(x.stale, false) AND c <> s "
             "RETURN e.where, e.method, e.path, s.name, collect({caller: c.name, evidence: x.evidence[0]})").result_set:
-        if (e_path or "").rsplit(":", 1)[0] in changed:
-            callers = [c for c in callers if c.get("caller")]
-            out["routes"].append({"id": f"R{len(out['routes']) + 1}", "service": svc, "route": f"{method} {path}",
-                                  "declared_at": e_path, "callers": callers})
+        f, _, at = e_path.rpartition(":")
+        if f in lines_by_file and at.isdigit():
+            declared.setdefault(f, []).append((int(at), method, path, svc, [c for c in callers if c.get("caller")]))
+    for f, rs in declared.items():
+        rs.sort()
+        for k, (at, method, path, svc, callers) in enumerate(rs):
+            end = rs[k + 1][0] - 1 if k + 1 < len(rs) else 10 ** 9
+            if any(at - 1 <= n <= end for n in lines_by_file[f]):
+                out["routes"].append({"id": f"R{len(out['routes']) + 1}", "service": svc, "route": f"{method} {path}",
+                                      "declared_at": f"{f}:{at}", "callers": callers,
+                                      "functions": enclosing_functions(_read(root, f), [at + 1], 1)})
     # calls that match no declared route, into or out of a changed service: a removed or renamed route, a new call to
     # a route that doesn't exist, or an older mismatch
     for caller, method, path, svc, ev in g.ro_query(
@@ -111,7 +192,7 @@ def facts(g, files, diff=""):
             "AND NOT coalesce(x.stale, false) RETURN c.name, e.method, e.path, e.service, x.evidence[0] "
             "ORDER BY e.service, e.path, c.name", {"s": names}).result_set:
         out["broken"].append({"id": f"B{len(out['broken']) + 1}", "service": svc, "caller": caller,
-                              "route": f"{method} {path}".strip(), "evidence": ev or "",
+                              "route": f"{method} {path}".strip(), "evidence": ev or "", "code": _snippet(root, ev),
                               # this PR's doing: it removed the route, or it added the call
                               "new": (svc in touched and _in_diff(diff, path, "-"))
                                      or (caller in touched and _in_diff(diff, path, "+"))})
@@ -119,6 +200,9 @@ def facts(g, files, diff=""):
         for j, inc in enumerate(mem.similar_incidents(g, names, limit=5), 1):
             out["incidents"].append({"id": f"I{j}", **{k: inc[k] for k in
                                      ("incident", "title", "cause", "fix", "runbook", "worked", "services", "score")}})
+    for r in out["routes"]:
+        for c in r["callers"]:
+            c["code"] = _snippet(root, c.get("evidence"))
     out["connections"] = list(conns.values())
     return out
 
@@ -168,10 +252,16 @@ response, a removed route) and what that means for the services that depend on i
 Rules:
 - Every finding must cite the fact ids it relies on in `cites`. A finding without facts behind it will be discarded.
 - Name only services that appear in FACTS. Never invent services, calls, files or incidents.
-- Prefer few, specific findings (at most 6) over many vague ones. Say what to check, where, and why.
+- Read the callers' code: judge whether the diff actually breaks how they call (path, method, fields, response shape).
+- Findings: at most 4, each 1-2 sentences, naming the file or function. No finding is better than a vague one.
+  For a safe or trivial change return no findings.
 - calls_to_missing_routes with new=true are calls to a route that this diff removes, renames or never existed: say so plainly.
 - verdict: risky if the diff plausibly breaks a caller or repeats a past incident; review if dependents exist but the
-  change looks compatible; safe if nothing depends on it. The summary is 2-3 plain sentences for the reviewer."""
+  change looks compatible; safe if nothing depends on it.
+- summary: 1-3 plain sentences a busy reviewer reads first, like "This renames X in Y (File.java). Z and W still call
+  the old path, so seat booking from the travel planner will fail." Say what changed, who is affected and what to do.
+  No markdown tables, no fact ids in the summary.
+- reviewer_checklist: at most 4 short, concrete actions; empty when nothing needs checking."""
 
 
 def _compact(f):
@@ -181,10 +271,12 @@ def _compact(f):
              "affected": [{"service": a["service"], "depth": a["depth"], "path": a["path"], "cites": a["cites"]}
                           for a in s["affected"][:40]]} for s in f["services"]],
             "calls": [{k: c[k] for k in ("id", "caller", "callee", "evidence")} for c in f["connections"][:120]],
-            "calls_to_missing_routes": [{k: b[k] for k in ("id", "caller", "service", "route", "evidence", "new")}
+            "changed_functions": {s["service"]: s["changed_functions"] for s in f["services"] if s["changed_functions"]},
+            "calls_to_missing_routes": [{k: b[k] for k in ("id", "caller", "service", "route", "evidence", "new", "code")}
                                         for b in f["broken"]],
-            "changed_routes": [{"id": r["id"], "service": r["service"], "route": r["route"],
-                                "callers": [c["caller"] for c in r["callers"]]} for r in f["routes"]],
+            "changed_routes": [{"id": r["id"], "service": r["service"], "route": r["route"], "handler": r["functions"],
+                                "callers": [{"caller": c["caller"], "code": c.get("code", "")} for c in r["callers"]]}
+                               for r in f["routes"]],
             "past_incidents": [{k: i[k] for k in ("id", "incident", "title", "cause", "fix", "worked")}
                                for i in f["incidents"]],
             "files_outside_any_service": f["unowned_files"][:50]}
@@ -307,81 +399,158 @@ def _link(evidence, repo_url, sha):
     return f"`{path}:{line}`"
 
 
-def _mermaid(f, limit=40):
+def _short(path):
+    return path.rsplit("/", 1)[-1]
+
+
+def _mermaid(f, max_nodes=14):
+    """Small, readable: changed services, the services that break, and their direct callers. Dark text on light fills
+    so it reads in both GitHub themes."""
     def node(n):
         return re.sub(r"\W", "_", n)
-    edges = sorted({(c["caller"], c["callee"]) for c in f["connections"]})
-    names = sorted({x for e in edges for x in e} | {s["service"] for s in f["services"]})
-    lines = ["```mermaid", "graph LR"] + [f'  {node(n)}["{n}"]' for n in names]
-    lines += [f"  {node(a)} --> {node(b)}" for a, b in edges[:limit]]
-    lines += [f"  style {node(s['service'])} fill:#fde2e2,stroke:#c0392b,stroke-width:2px" for s in f["services"]]
-    if len(edges) > limit:
-        lines.append(f"  more[\"+{len(edges) - limit} more calls\"]")
-    return lines + ["```"]
+    changed = [s["service"] for s in f["services"]]
+    broken = sorted({b["caller"] for b in f["broken"] if b["new"]})
+    callers = sorted({c["caller"] for r in f["routes"] for c in r["callers"]}
+                     | {a["service"] for s in f["services"] for a in s["affected"] if a["depth"] == 1})
+    second = sorted({a["service"] for s in f["services"] for a in s["affected"] if a["depth"] == 2})
+    names = list(dict.fromkeys(changed + broken + callers + second))[:max_nodes]
+    keep = set(names)
+    edges = sorted({(c["caller"], c["callee"]) for c in f["connections"] if c["caller"] in keep and c["callee"] in keep}
+                   | {(b["caller"], b["service"]) for b in f["broken"] if b["caller"] in keep and b["service"] in keep})
+    if not edges:
+        return []
+    L = ["```mermaid", "flowchart RL",
+         "  classDef changed fill:#ffd6d6,stroke:#c62828,stroke-width:2px,color:#111111,font-weight:bold",
+         "  classDef breaks fill:#ffe9b3,stroke:#e65100,stroke-width:2px,color:#111111",
+         "  classDef caller fill:#dbeafe,stroke:#1d4ed8,stroke-width:1px,color:#111111",
+         "  classDef far fill:#f1f5f9,stroke:#64748b,stroke-width:1px,color:#111111"]
+    for n in names:
+        L.append(f'  {node(n)}["{n}"]')
+    broken_edges = {(b["caller"], b["service"]) for b in f["broken"] if b["new"]}
+    for a, b in edges:
+        L.append(f"  {node(a)} -. calls a removed route .-> {node(b)}" if (a, b) in broken_edges
+                 else f"  {node(a)} --> {node(b)}")
+    for cls, group in (("changed", changed), ("breaks", broken), ("caller", callers), ("far", second)):
+        members = [node(n) for n in group if n in keep and (cls == "changed" or n not in changed)
+                   and (cls != "caller" or n not in broken) and (cls != "far" or n not in broken + callers)]
+        if members:
+            L.append(f"  class {','.join(dict.fromkeys(members))} {cls}")
+    if len(set(changed + broken + callers + second)) > max_nodes:
+        L.append(f"  %% {len(set(changed + broken + callers + second)) - max_nodes} more in the table below")
+    return L + ["```"]
+
+
+def summary_text(f, rule_v):
+    """The plain-language summary when there is no AI one: what changed, who breaks, how far it reaches."""
+    if not f["services"]:
+        return "No service on the map is touched by this change, so nothing downstream is affected."
+    parts = []
+    for s in f["services"]:
+        fns = [fn for v in s["changed_functions"].values() for fn in v][:3]
+        files = ", ".join(f"`{_short(x)}`" for x in s["changed_files"][:3])
+        parts.append(f"`{s['service']}` ({files}" + (f": {', '.join(f'`{x}`' for x in fns)}" if fns else "") + ")")
+    out = ["This PR changes " + "; ".join(parts) + "."]
+    new = [b for b in f["broken"] if b["new"]]
+    if new:
+        routes = sorted({b["route"] for b in new})
+        who = sorted({b["caller"] for b in new})
+        out.append(f"**{len(who)} service{'s' if len(who) > 1 else ''} will break:** {', '.join(f'`{x}`' for x in who)} "
+                   f"still call{'s' if len(who) == 1 else ''} {', '.join(f'`{r}`' for r in routes)}, which no longer exists.")
+    for r in f["routes"]:
+        if r["callers"]:
+            who = ", ".join(f"`{c['caller']}`" for c in r["callers"][:4])
+            out.append(f"`{r['route']}` changed and is used by {who}"
+                       + (f" and {len(r['callers']) - 4} more" if len(r["callers"]) > 4 else "") + ".")
+    reach = sum(s["dependents"] for s in f["services"])
+    users = sorted({e for s in f["services"] for e in s["entry_points_hit"]})
+    if reach:
+        out.append(f"Up to {reach} service{'s' if reach > 1 else ''} depend on this"
+                   + (f"; users reach it through {', '.join(f'`{u}`' for u in users[:3])}." if users else "."))
+    elif not new:
+        out.append("Nothing on the map depends on it.")
+    return " ".join(out)
+
+
+def _cite_link(cid, f, repo_url, sha):
+    for b in f["broken"]:
+        if b["id"] == cid:
+            return _link(b["evidence"], repo_url, sha)
+    for c in f["connections"]:
+        if c["id"] == cid:
+            return _link(c["evidence"], repo_url, sha)
+    for r in f["routes"]:
+        if r["id"] == cid:
+            return _link(f"code | {r['declared_at']}", repo_url, sha)
+    for i in f["incidents"]:
+        if i["id"] == cid:
+            return f"incident {i['incident']}"
+    return ""
 
 
 def render(f, rule_v, reasons, review=None, report=None, repo_url="", sha=""):
     v = review["verdict"] if review else rule_v
-    L = [MARKER, f"## NextTrace: {BADGE[v]}", ""]
-    if review and review["summary"]:
-        L += [f"> {review['summary']}", ""]
-    if not f["services"]:
-        L += ["This change touches no service on the map, so nothing downstream is affected.", ""]
-    else:
-        L += ["| Changed service | Owner | Depends on it | Criticality | Entry points hit |", "|---|---|---|---|---|"]
-        for s in f["services"]:
-            L.append(f"| `{s['service']}` ({s['id']}) | {s['owner'] or '-'} | {s['dependents']} | "
-                     f"#{s['rank']} of {s['of']} {s['kind']}s | {', '.join(s['entry_points_hit']) or '-'} |")
+    new = [b for b in f["broken"] if b["new"]]
+    headline = {"safe": "No cross-service impact", "review": "Has downstream dependents",
+                "risky": f"Breaks {len({b['caller'] for b in new})} caller(s)" if new else "High-impact change"}[v]
+    L = [MARKER, f"### {BADGE[v]} · {headline}", "",
+         (review["summary"] if review and review["summary"] else summary_text(f, rule_v)), ""]
+    if v == "safe" and not (review and review["findings"]):
+        L.append(f"_NextTrace checked {len(f['files'])} changed file(s) against the service map._")
+        return "\n".join(L) + "\n"
+    if new:
+        L += ["**Will break**", ""]
+        for b in new:
+            L.append(f"- `{b['caller']}` → `{b['route']}` at {_link(b['evidence'], repo_url, sha)}")
         L.append("")
     if review and review["findings"]:
-        L += ["### Findings", ""]
-        for x in review["findings"]:
-            L.append(f"- **{x['severity'].upper()}: {x['title']}** {x['detail']} " + " ".join(f"`{c}`" for c in x["cites"]))
+        L += ["**Review notes**", ""]
+        for x in review["findings"][:4]:
+            where = next((l for c in x["cites"] if (l := _cite_link(c, f, repo_url, sha))), "")
+            L.append(f"- **{x['title']}** {x['detail']}" + (f" ({where})" if where else ""))
         L.append("")
-    if f["broken"]:
-        L += ["### Calls to routes that no longer exist" if any(b["new"] for b in f["broken"])
-              else "### Calls that match no declared route", ""]
-        L += [f"- `{b['caller']}` calls `{b['route']}` on `{b['service']}` ({b['id']}"
-              + (", broken by this PR" if b["new"] else ", already unmatched") + f") at {_link(b['evidence'], repo_url, sha)}"
-              for b in f["broken"]] + [""]
-    for r in f["routes"]:
-        if r["callers"]:
-            L += [f"### Changed route `{r['route']}` ({r['id']}) is called by", ""]
-            L += [f"- `{c['caller']}` at {_link(c.get('evidence', ''), repo_url, sha)}" for c in r["callers"]] + [""]
-    affected = [(s, a) for s in f["services"] for a in s["affected"]]
-    if affected:
-        L += ["### What this change can break", "", "| Service | Hops | Chain | Owner | Confidence |", "|---|---|---|---|---|"]
-        for s, a in affected[:30]:
-            L.append(f"| `{a['service']}` | {a['depth']} | {' → '.join(a['path'])} | {a['owner'] or '-'} | {a['confidence']} |")
-        if len(affected) > 30:
-            L.append(f"| … {len(affected) - 30} more | | | | |")
-        L += [""] + _mermaid(f) + [""]
+    if review and review["checklist"] and v != "safe":
+        L += ["**Before merging**", ""] + [f"- [ ] {c}" for c in review["checklist"][:4]] + [""]
+    L += _mermaid(f) + [""]
     if f["incidents"]:
-        L += ["### Past incidents on these services", ""]
-        L += [f"- **{i['incident']}** ({i['id']}): {i['title']}. Cause `{i['cause']}`; fix: {i['fix'] or '-'}"
-              + (f" (runbook worked {i['worked']})" if i["worked"] else "") for i in f["incidents"]] + [""]
+        L += ["**Seen before**", ""]
+        L += [f"- {i['incident']}: {i['title']} (cause `{i['cause']}`). Fix: {i['fix'] or '-'}"
+              + (f", worked {i['worked']}" if i["worked"] else "") for i in f["incidents"][:3]] + [""]
     owners = sorted({o for s in f["services"] for o in s["owners_to_notify"]})
     if owners:
-        L += [f"**Suggested reviewers:** {', '.join(owners)}", ""]
-    if review and review["checklist"]:
-        L += ["### Before merging", ""] + [f"- [ ] {c}" for c in review["checklist"]] + [""]
-    L += ["<details><summary>Why this verdict, and the evidence</summary>", "", "**Rules:** " + "; ".join(reasons), ""]
-    for c in f["connections"]:
-        L.append(f"- `{c['id']}` {c['caller']} → {c['callee']} ({c['confidence']}): {_link(c['evidence'], repo_url, sha)}")
+        L += [f"**Owners to loop in:** {', '.join(owners)}", ""]
+    affected = [(s, a) for s in f["services"] for a in s["affected"]]
+    L += ["<details><summary>Full impact, routes and evidence</summary>", ""]
     for s in f["services"]:
-        L.append(f"- `{s['id']}` {s['service']}: changed {', '.join(f'`{x}`' for x in s['changed_files'][:5])}")
+        L.append(f"- `{s['service']}`: {s['dependents']} dependent(s), #{s['rank']} of {s['of']} {s['kind']}s by impact")
+    if affected:
+        L += ["", "| Service | Hops | Via |", "|---|---|---|"]
+        for s, a in affected[:40]:
+            L.append(f"| `{a['service']}` | {a['depth']} | {' → '.join(a['path'][1:-1]) or 'direct'} |")
+        if len(affected) > 40:
+            L.append(f"| +{len(affected) - 40} more | | |")
+    for r in f["routes"]:
+        if r["callers"]:
+            L += ["", f"`{r['route']}` is called from:"]
+            L += [f"- `{c['caller']}` at {_link(c.get('evidence', ''), repo_url, sha)}" for c in r["callers"]]
+    older = [b for b in f["broken"] if not b["new"]]
+    if older:
+        L += ["", "Already calling routes that don't exist (not caused by this PR):"]
+        L += [f"- `{b['caller']}` → `{b['route']}` at {_link(b['evidence'], repo_url, sha)}" for b in older]
+    if f["connections"]:
+        L += ["", "Call evidence:"]
+        L += [f"- {c['caller']} → {c['callee']}: {_link(c['evidence'], repo_url, sha)}" for c in f["connections"][:30]]
     if f["unowned_files"]:
-        L.append(f"- Not in any mapped service: {', '.join(f'`{x}`' for x in f['unowned_files'][:10])}")
-    L += ["", "</details>", ""]
+        L += ["", "Files outside any mapped service: " + ", ".join(f"`{x}`" for x in f["unowned_files"][:10])]
+    L += ["", "Rules: " + "; ".join(reasons), "", "</details>", ""]
     if review:
-        note = f"AI review by `{report['model']}`: {report['kept']} finding(s) kept"
+        note = f"Reviewed with `{report['model']}` on top of the service map"
         if report["dropped"]:
-            note += f", {len(report['dropped'])} dropped (" + "; ".join(f"{d['title']}: {d['why']}" for d in report["dropped"]) + ")"
+            note += f"; {len(report['dropped'])} AI note(s) dropped for lacking graph evidence"
         if review["ai_verdict"] != review["verdict"]:
-            note += f". The AI said {review['ai_verdict']}; the rules set the floor at {review['verdict']}"
-        L.append(f"<sub>{note}. Every fact comes from the NextTrace service map in FalkorDB.</sub>")
+            note += f"; rules kept the verdict at {review['verdict']} (AI said {review['ai_verdict']})"
     else:
-        L.append(f"<sub>Rule-based review ({(report or 'no AI')}). Every fact comes from the NextTrace service map in FalkorDB.</sub>")
+        note = "Rule-based review from the service map" + (f" ({report})" if report and "GEMINI" not in str(report) else "")
+    L.append(f"_{note}. Every service, call and line above comes from the NextTrace graph in FalkorDB._")
     return "\n".join(L) + "\n"
 
 
@@ -391,8 +560,8 @@ def _git(root, *args):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, check=True).stdout
 
 
-def review_change(g, files, diff, repo_url="", sha="", use_ai=True):
-    f = facts(g, files, diff)
+def review_change(g, files, diff, repo_url="", sha="", use_ai=True, root=None):
+    f = facts(g, files, diff, root)
     rule_v, reasons = verdict(f)
     review, report = ai_review(g, f, diff, rule_v) if use_ai else (None, "AI disabled")
     if review is None:
@@ -420,7 +589,7 @@ def main(argv=None):
     files = [x for x in _git(root, "diff", "--name-only", f"{a.base}...{a.head}").splitlines() if x]
     diff = _git(root, "diff", f"{a.base}...{a.head}")
     sha = a.sha or _git(root, "rev-parse", a.head).strip()
-    comment, result = review_change(connect().select_graph(a.graph), files, diff, a.repo_url, sha, not a.no_ai)
+    comment, result = review_change(connect().select_graph(a.graph), files, diff, a.repo_url, sha, not a.no_ai, root)
     if a.out:
         Path(a.out).write_text(comment)
     else:

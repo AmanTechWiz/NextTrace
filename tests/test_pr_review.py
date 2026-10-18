@@ -156,7 +156,7 @@ def test_ai_findings_must_cite_facts_and_name_only_known_services(repo):
     assert review["checklist"] == ["Is /charge deployed in payments first?"]
     assert review["verdict"] == rule_v and review["ai_verdict"] == "safe"                 # rules are the floor
     comment = pr_review.render(f, rule_v, ["r"], review, report)
-    assert "payments route renamed" in comment and "2 dropped" in comment and "rules set the floor" in comment
+    assert "payments route renamed" in comment and "2 AI note(s) dropped" in comment and "rules kept the verdict" in comment
 
 
 def test_ai_can_raise_but_bad_summary_is_removed(repo):
@@ -228,3 +228,46 @@ def test_cli_end_to_end(repo, tmp_path, monkeypatch):
                     "--repo-url", "https://github.com/o/r"])
     text = out.read_text()
     assert "🔴 Risky" in text and "`payments`" in text and "/blob/" in text
+
+
+def test_changed_lines_and_enclosing_functions_across_languages():
+    diff = ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -3,2 +3,3 @@ def a():\n     x = 1\n+    y = 2\n     z\n"
+            "@@ -10,2 +11,1 @@\n-    gone()\n     keep\n")
+    assert pr_review.changed_lines(diff) == {"x.py": [4, 11]}
+    py = ["import os", "", "def first():", "    a = 1", "", "async def second(x):", "    return x"]
+    assert pr_review.enclosing_functions(py, [4, 7]) == ["first", "second"]
+    java = ["class A {", "    @PostMapping(\"/x\")", "    public Response<Seat> create(@RequestBody Seat s) {",
+            "        if (s == null) {", "            return null;", "        }", "    }"]
+    assert pr_review.enclosing_functions(java, [5]) == ["create"]                 # not the `if`
+    assert pr_review.enclosing_functions(java, [2]) == ["create"]                 # an annotation belongs to the method below
+    go = ["package main", "func (s *Server) GetCart(ctx context.Context) error {", "  return nil", "}"]
+    assert pr_review.enclosing_functions(go, [3]) == ["GetCart"]
+    ts = ["export const addItem = async (id: string) => {", "  await save(id)", "}",
+          "function remove(id) {", "  drop(id)", "}"]
+    assert pr_review.enclosing_functions(ts, [2, 5]) == ["addItem", "remove"]
+    assert pr_review.enclosing_functions(["x = 1"], [1]) == []
+
+
+def test_only_routes_whose_handler_changed_count(repo):
+    root, g = repo
+    two = FILES["payments/app.py"] + "\n@app.route('/refund', methods=['POST'])\ndef refund():\n    return 'r'\n"
+    (root / "payments/app.py").write_text(two)
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qam", "refund route")
+    files, diff = change(root, "payments/app.py", two.replace("return 'r'", "return 'refunded'"))
+    f = pr_review.facts(g, files, diff)
+    assert [r["route"] for r in f["routes"]] == ["POST /refund"]                  # /pay is in the file, not in the change
+    assert f["services"][0]["changed_functions"] == {"payments/app.py": ["refund"]}
+
+
+def test_comment_layout_scales_with_the_verdict(repo):
+    root, g = repo
+    files, diff = change(root, "docs/guide.md", "# guide v2\n")
+    safe, _ = pr_review.review_change(g, files, diff, use_ai=False)
+    assert len(safe.splitlines()) <= 6 and "mermaid" not in safe and "<details>" not in safe
+    files, diff = change(root, "payments/app.py", FILES["payments/app.py"].replace("'/pay'", "'/v2/pay'"))
+    risky, _ = pr_review.review_change(g, files, diff, "https://github.com/o/r", "abc", use_ai=False)
+    head = risky.split("<details>")[0]
+    assert "Breaks 1 caller" in head and "**Will break**" in head and "`orders` still calls" in head
+    assert "`pay`" in head                                                       # the changed function, by name
+    assert "classDef changed" in head and "color:#111111" in head                # readable on light and dark themes
+    assert "|---|" not in head                                                   # tables only inside the details
